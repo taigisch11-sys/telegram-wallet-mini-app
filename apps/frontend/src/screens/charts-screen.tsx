@@ -27,7 +27,7 @@ export function ChartsScreen() {
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-1 rounded-md border border-line bg-panel p-1">
         {periods.map((item) => (
-          <button key={item} onClick={() => setPeriod(item)} className={`rounded px-2 py-2 text-xs font-bold ${period === item ? "bg-mint text-ink" : "text-slate-400"}`}>
+          <button key={item} type="button" onClick={() => setPeriod(item)} className={`rounded px-2 py-2 text-xs font-bold ${period === item ? "bg-mint text-ink" : "text-slate-400"}`}>
             {periodLabels[item]}
           </button>
         ))}
@@ -45,7 +45,7 @@ function Chart({ title, data, keyName, color }: { title: string; data: Timeserie
     <Card>
       <h2 className="mb-3 font-extrabold">{title}</h2>
       {data.length === 0 ? (
-        <div className="grid h-52 place-items-center rounded-md border border-line text-center text-sm text-slate-400">Данные появятся после первой корректировки остатков.</div>
+        <div className="grid h-52 place-items-center rounded-md border border-line px-4 text-center text-sm text-slate-400">Данные появятся после первой корректировки остатков.</div>
       ) : (
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">

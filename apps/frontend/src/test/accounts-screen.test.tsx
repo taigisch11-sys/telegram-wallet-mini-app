@@ -28,12 +28,12 @@ describe("AccountsScreen", () => {
 
     fireEvent.change(screen.getAllByPlaceholderText("Название")[0], { target: { value: "Карта" } });
     fireEvent.change(screen.getAllByDisplayValue("0.00")[0], { target: { value: "1500" } });
-    fireEvent.click(screen.getByLabelText("Добавить счет"));
+    fireEvent.click(screen.getByLabelText("Добавить счёт"));
 
     expect(await screen.findByText("Карта")).toBeInTheDocument();
     expect(screen.getByText("1 500 ₽")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить счет"));
+    fireEvent.click(screen.getByLabelText("Удалить счёт"));
     await waitFor(() => {
       expect(screen.getByText("Счетов пока нет. Добавьте карту, вклад или наличные.")).toBeInTheDocument();
     });

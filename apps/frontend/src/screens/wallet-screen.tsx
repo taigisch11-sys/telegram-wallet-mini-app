@@ -1,12 +1,13 @@
 import type { AccountDto, DebtDto } from "@wallet/shared";
 import { Banknote, ChevronRight, CreditCard, Landmark, TrendingUp } from "lucide-react";
+import type { Screen } from "../app/App";
 import { AlertsPanel } from "../components/wallet/alerts-panel";
 import { BalanceHero } from "../components/wallet/balance-hero";
 import { UpcomingList } from "../components/wallet/upcoming-list";
 import { useWalletState } from "../hooks/use-state";
 import { money } from "../lib/format";
 
-export function WalletScreen({ wallet }: { wallet: ReturnType<typeof useWalletState> }) {
+export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof useWalletState>; onNavigate: (screen: Screen) => void }) {
   const state = wallet.data;
   const topAccounts = state.accounts.slice(0, 3);
   const topDebts = state.debts.slice(0, 2);
@@ -20,6 +21,7 @@ export function WalletScreen({ wallet }: { wallet: ReturnType<typeof useWalletSt
         calculatedBalance={money(state.balances.calculatedBalance)}
         additionalExpenses={money(state.balances.additionalExpenses)}
         freeMoney={money(state.balances.freeMoney)}
+        onNavigate={onNavigate}
       />
 
       <section className="space-y-3">
@@ -29,18 +31,26 @@ export function WalletScreen({ wallet }: { wallet: ReturnType<typeof useWalletSt
           amount={money(state.balances.accountBalance)}
           icon="card"
           tone="blue"
+          onClick={() => onNavigate("accounts")}
         />
         {topAccounts.map((account) => (
-          <AccountRow key={account.id} account={account} />
+          <AccountRow key={account.id} account={account} onClick={() => onNavigate("accounts")} />
         ))}
-        <WalletAssetRow title="Долги" subtitle={state.debts.length ? "Долговая нагрузка" : "Долгов пока нет"} amount={money(state.balances.debtBalance)} icon="debt" tone="green" />
+        <WalletAssetRow
+          title="Долги"
+          subtitle={state.debts.length ? "Долговая нагрузка" : "Долгов пока нет"}
+          amount={money(state.balances.debtBalance)}
+          icon="debt"
+          tone="green"
+          onClick={() => onNavigate("accounts")}
+        />
         {topDebts.map((debt) => (
-          <DebtRow key={debt.id} debt={debt} />
+          <DebtRow key={debt.id} debt={debt} onClick={() => onNavigate("accounts")} />
         ))}
       </section>
 
       <AlertsPanel alerts={state.alerts} />
-      <UpcomingList items={state.upcoming} />
+      <UpcomingList items={state.upcoming} onNavigatePlan={() => onNavigate("plan")} />
     </div>
   );
 }
@@ -50,18 +60,20 @@ function WalletAssetRow({
   subtitle,
   amount,
   icon,
-  tone
+  tone,
+  onClick
 }: {
   title: string;
   subtitle: string;
   amount: string;
   icon: "card" | "debt";
   tone: "blue" | "green";
+  onClick: () => void;
 }) {
   const Icon = icon === "card" ? CreditCard : Banknote;
   const toneClass = tone === "blue" ? "bg-[#2d7dff]" : "bg-[#22c77a]";
   return (
-    <div className="wallet-row">
+    <button className="wallet-row w-full text-left" type="button" onClick={onClick}>
       <div className={`wallet-token ${toneClass}`}>
         <Icon size={28} strokeWidth={2.7} />
       </div>
@@ -72,13 +84,13 @@ function WalletAssetRow({
       <div className="text-right">
         <p className="text-[18px] font-bold text-white">{amount}</p>
       </div>
-    </div>
+    </button>
   );
 }
 
-function AccountRow({ account }: { account: AccountDto }) {
+function AccountRow({ account, onClick }: { account: AccountDto; onClick: () => void }) {
   return (
-    <div className="wallet-row bg-[#232326]">
+    <button className="wallet-row w-full bg-[#232326] text-left" type="button" onClick={onClick}>
       <div className="wallet-token bg-[#3a4352]">
         <Landmark size={25} />
       </div>
@@ -87,13 +99,13 @@ function AccountRow({ account }: { account: AccountDto }) {
         <p className="text-[14px] font-semibold text-[#8f8f95]">Счёт</p>
       </div>
       <p className="text-[18px] font-bold text-white">{money(account.balance)}</p>
-    </div>
+    </button>
   );
 }
 
-function DebtRow({ debt }: { debt: DebtDto }) {
+function DebtRow({ debt, onClick }: { debt: DebtDto; onClick: () => void }) {
   return (
-    <div className="wallet-row bg-[#232326]">
+    <button className="wallet-row w-full bg-[#232326] text-left" type="button" onClick={onClick}>
       <div className="wallet-token bg-[#3d2630] text-[#ff6b73]">
         <TrendingUp size={25} />
       </div>
@@ -105,6 +117,6 @@ function DebtRow({ debt }: { debt: DebtDto }) {
         <p className="text-[18px] font-bold text-[#ff6b73]">{money(debt.amount)}</p>
         <ChevronRight className="text-[#6f6f75]" size={21} />
       </div>
-    </div>
+    </button>
   );
 }

@@ -18,7 +18,7 @@ export function App() {
     if (screen === "accounts") return <AccountsScreen wallet={wallet} />;
     if (screen === "charts") return <ChartsScreen />;
     if (screen === "history") return <HistoryScreen />;
-    return <WalletScreen wallet={wallet} />;
+    return <WalletScreen wallet={wallet} onNavigate={setScreen} />;
   }, [screen, wallet]);
 
   return (

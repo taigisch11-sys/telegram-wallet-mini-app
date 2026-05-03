@@ -46,7 +46,11 @@ export const api = {
   deleteAccount: (id: string) => request(`/api/accounts/${id}`, { method: "DELETE" }),
   createDebt: (body: { name: string; amount: string }) => request("/api/debts", { method: "POST", body: JSON.stringify(body) }),
   deleteDebt: (id: string) => request(`/api/debts/${id}`, { method: "DELETE" }),
+  createIncome: (body: { name: string; amount: string; plannedDate: string }) => request("/api/income", { method: "POST", body: JSON.stringify(body) }),
+  deleteIncome: (id: string) => request(`/api/income/${id}`, { method: "DELETE" }),
   markIncome: (id: string) => request(`/api/income/${id}/mark-received`, { method: "PATCH", body: JSON.stringify({}) }),
+  createPayment: (body: { name: string; amount: string; plannedDate: string }) => request("/api/payments", { method: "POST", body: JSON.stringify(body) }),
+  deletePayment: (id: string) => request(`/api/payments/${id}`, { method: "DELETE" }),
   markPayment: (id: string) => request(`/api/payments/${id}/mark-paid`, { method: "PATCH", body: JSON.stringify({}) }),
   reconcile: (body: unknown) => request("/api/accounts/reconcile", { method: "POST", body: JSON.stringify(body) })
 };

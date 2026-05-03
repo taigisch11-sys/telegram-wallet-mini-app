@@ -3,28 +3,30 @@ import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
 import { money, shortDate } from "../../lib/format";
 import { Badge } from "../common/badge";
 
-export function UpcomingList({ items }: { items: UpcomingEventDto[] }) {
+export function UpcomingList({ items, onNavigatePlan }: { items: UpcomingEventDto[]; onNavigatePlan: () => void }) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between px-6">
         <h2 className="text-[21px] font-extrabold text-[#8f8f95]">Ближайшее</h2>
-        <span className="text-[16px] font-semibold text-[#55a7ff]">Все</span>
+        <button type="button" className="text-[16px] font-semibold text-[#55a7ff]" onClick={onNavigatePlan}>
+          Все
+        </button>
       </div>
       <div className="space-y-3">
         {items.length === 0 ? (
-          <div className="wallet-row">
+          <button className="wallet-row w-full text-left" type="button" onClick={onNavigatePlan}>
             <div className="wallet-token bg-[#34343a] text-[#a1a1a7]">
               <ChevronRight size={24} />
             </div>
             <div>
               <p className="text-[18px] font-extrabold text-white">Событий пока нет</p>
-              <p className="text-[15px] font-semibold text-[#9a9aa0]">Платежи и доходы появятся здесь.</p>
+              <p className="text-[15px] font-semibold text-[#9a9aa0]">Добавьте доходы и платежи в плане.</p>
             </div>
-          </div>
+          </button>
         ) : null}
 
         {items.map((item) => (
-          <div key={item.id} className="wallet-row">
+          <button key={item.id} className="wallet-row w-full text-left" type="button" onClick={onNavigatePlan}>
             <div className={`wallet-token ${item.kind === "income" ? "bg-[#1f6f48] text-[#36d985]" : "bg-[#4a2028] text-[#ff6b73]"}`}>
               {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
@@ -36,7 +38,7 @@ export function UpcomingList({ items }: { items: UpcomingEventDto[] }) {
               <p className="text-[17px] font-bold text-white">{money(item.amount)}</p>
               <Badge status={item.status} />
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </section>
