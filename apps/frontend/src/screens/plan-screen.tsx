@@ -28,6 +28,12 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
   const [repaymentName, setRepaymentName] = useState("");
   const [repaymentAmount, setRepaymentAmount] = useState("0.00");
   const [repaymentDate, setRepaymentDate] = useState(today);
+  const [repaymentSourceAccountId, setRepaymentSourceAccountId] = useState("");
+  const [repaymentTargetDebtId, setRepaymentTargetDebtId] = useState("");
+  const selectedRepaymentAccountId = repaymentSourceAccountId || wallet.data.accounts[0]?.id || "";
+  const selectedRepaymentDebtId = repaymentTargetDebtId || wallet.data.debts[0]?.id || "";
+  const selectedRepaymentAccount = wallet.data.accounts.find((account) => account.id === selectedRepaymentAccountId) ?? wallet.data.accounts[0];
+  const selectedRepaymentDebt = wallet.data.debts.find((debt) => debt.id === selectedRepaymentDebtId) ?? wallet.data.debts[0];
 
   async function addIncome() {
     const name = incomeName.trim();
@@ -151,8 +157,8 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
 
   async function addDebtRepayment() {
     const name = repaymentName.trim();
-    const sourceAccount = wallet.data.accounts[0];
-    const targetDebt = wallet.data.debts[0];
+    const sourceAccount = selectedRepaymentAccount;
+    const targetDebt = selectedRepaymentDebt;
     if (!name || !sourceAccount || !targetDebt) return;
 
     const plannedDate = new Date(repaymentDate).toISOString();
@@ -296,8 +302,40 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
         ) : (
           <>
             <div className="mb-3 grid grid-cols-2 gap-2">
-              <DebtBalance label={wallet.data.accounts[0].name} amount={wallet.data.accounts[0].balance} tone="account" />
-              <DebtBalance label={wallet.data.debts[0].name} amount={wallet.data.debts[0].amount} tone="debt" />
+              <DebtBalance label={selectedRepaymentAccount.name} amount={selectedRepaymentAccount.balance} tone="account" />
+              <DebtBalance label={selectedRepaymentDebt.name} amount={selectedRepaymentDebt.amount} tone="debt" />
+            </div>
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <label className="block text-xs font-bold text-slate-400">
+                Счёт списания
+                <select
+                  aria-label="Счёт списания"
+                  className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white"
+                  value={selectedRepaymentAccountId}
+                  onChange={(event) => setRepaymentSourceAccountId(event.target.value)}
+                >
+                  {wallet.data.accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-xs font-bold text-slate-400">
+                Долг для погашения
+                <select
+                  aria-label="Долг для погашения"
+                  className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white"
+                  value={selectedRepaymentDebtId}
+                  onChange={(event) => setRepaymentTargetDebtId(event.target.value)}
+                >
+                  {wallet.data.debts.map((debt) => (
+                    <option key={debt.id} value={debt.id}>
+                      {debt.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <div className="grid grid-cols-[1fr_104px_42px] gap-2">
               <input aria-label="Название погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Погашение кредитки" value={repaymentName} onChange={(event) => setRepaymentName(event.target.value)} />

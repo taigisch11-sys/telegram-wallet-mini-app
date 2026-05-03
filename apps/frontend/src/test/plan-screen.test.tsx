@@ -71,12 +71,20 @@ describe("PlanScreen", () => {
       <PlanHarness
         initialState={{
           ...emptyState,
-          accounts: [{ id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() }],
-          debts: [{ id: "credit-card", name: "Кредитка", amount: "-30000.00", createdAt: new Date().toISOString() }]
+          accounts: [
+            { id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() },
+            { id: "reserve-card", name: "Резерв", balance: "80000.00", createdAt: new Date().toISOString() }
+          ],
+          debts: [
+            { id: "credit-card", name: "Кредитка", amount: "-30000.00", createdAt: new Date().toISOString() },
+            { id: "loan", name: "Кредит", amount: "-70000.00", createdAt: new Date().toISOString() }
+          ]
         }}
       />
     );
 
+    fireEvent.change(screen.getByLabelText("Счёт списания"), { target: { value: "reserve-card" } });
+    fireEvent.change(screen.getByLabelText("Долг для погашения"), { target: { value: "loan" } });
     fireEvent.change(screen.getByLabelText("Название погашения"), { target: { value: "Погашение кредитки" } });
     fireEvent.change(screen.getByLabelText("Сумма погашения"), { target: { value: "10000" } });
     fireEvent.click(screen.getByLabelText("Добавить погашение долга"));
@@ -85,8 +93,8 @@ describe("PlanScreen", () => {
     fireEvent.click(screen.getByLabelText("Погашение выполнено"));
 
     await waitFor(() => {
-      expect(screen.getByText("40 000 ₽")).toBeInTheDocument();
-      expect(screen.getByText("-20 000 ₽")).toBeInTheDocument();
+      expect(screen.getByText("70 000 ₽")).toBeInTheDocument();
+      expect(screen.getByText("-60 000 ₽")).toBeInTheDocument();
     });
   });
 });
