@@ -5,7 +5,7 @@ import { App } from "../app/App";
 describe("App", () => {
   it("renders bottom navigation", () => {
     render(<App />);
-    expect(screen.getAllByText("Кошелёк").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Финансы").length).toBeGreaterThan(0);
     expect(screen.getByText("Графики")).toBeInTheDocument();
   });
 });

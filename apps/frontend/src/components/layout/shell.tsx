@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import type { Screen } from "../../app/App";
 
 const items: { id: Screen; label: string; icon: typeof Home }[] = [
-  { id: "wallet", label: "Кошелёк", icon: Home },
+  { id: "wallet", label: "Финансы", icon: Home },
   { id: "plan", label: "План", icon: ListChecks },
   { id: "accounts", label: "Счета", icon: CreditCard },
   { id: "charts", label: "Графики", icon: BarChart3 },
@@ -19,7 +19,7 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
         </button>
         <div className="text-center">
           <div className="flex items-center justify-center gap-1.5">
-            <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">Кошелёк</h1>
+            <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">Финансы</h1>
             <ShieldCheck className="fill-[#2f8cff] text-[#2f8cff]" size={21} />
           </div>
           <p className="text-[13px] font-semibold text-[#8f8f95]">мини-приложение</p>

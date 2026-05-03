@@ -276,7 +276,7 @@ async function sendTelegramStartMessage(env: WorkerEnv, chatId: number | string)
       chat_id: chatId,
       menu_button: {
         type: "web_app",
-        text: "Кошелёк",
+        text: "Финансы",
         web_app: { url: env.TELEGRAM_WEBAPP_URL }
       }
     })
@@ -287,12 +287,12 @@ async function sendTelegramStartMessage(env: WorkerEnv, chatId: number | string)
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: "Откройте Кошелёк, чтобы сверить баланс и план платежей.",
+      text: "Откройте Финансы, чтобы сверить баланс и план платежей.",
       reply_markup: {
         inline_keyboard: [
           [
             {
-              text: "Открыть Кошелёк",
+              text: "Открыть Финансы",
               web_app: { url: env.TELEGRAM_WEBAPP_URL }
             }
           ]
