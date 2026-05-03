@@ -1,7 +1,7 @@
 import type { DashboardStateDto, HistoryItemDto, TimeseriesPointDto } from "@wallet/shared";
 import { getTelegramInitData } from "./telegram";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 const TOKEN_KEY = "wallet_jwt";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

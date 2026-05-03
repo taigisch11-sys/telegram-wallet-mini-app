@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   plugins: [react()],
   server: {
-    allowedHosts: true
+    allowedHosts: true,
+    proxy: {
+      "/api": "http://127.0.0.1:4000"
+    }
   },
   resolve: {
     alias: {
