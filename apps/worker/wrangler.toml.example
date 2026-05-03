@@ -1,0 +1,14 @@
+name = "telegram-wallet-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+
+[vars]
+FRONTEND_ORIGIN = "https://taigisch11-sys.github.io"
+TELEGRAM_WEBAPP_URL = "https://taigisch11-sys.github.io/telegram-wallet-mini-app/"
+DEV_AUTH_BYPASS = "false"
+
+# Set secrets with:
+# wrangler secret put DATABASE_URL
+# wrangler secret put JWT_SECRET
+# wrangler secret put TELEGRAM_BOT_TOKEN
+# wrangler secret put TELEGRAM_WEBHOOK_SECRET

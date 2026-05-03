@@ -1,0 +1,8 @@
+name = "telegram-wallet-api"
+main = "src/index.ts"
+compatibility_date = "2026-05-03"
+
+[vars]
+FRONTEND_ORIGIN = "https://taigisch11-sys.github.io"
+TELEGRAM_WEBAPP_URL = "https://taigisch11-sys.github.io/telegram-wallet-mini-app/"
+DEV_AUTH_BYPASS = "false"

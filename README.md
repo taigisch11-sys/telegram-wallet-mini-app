@@ -97,6 +97,37 @@ Telegram -> HTTPS tunnel -> this PC -> frontend/backend -> local PostgreSQL
 - Backend: Render/Railway/Fly.io/Koyeb или VPS
 - Database: Neon/Supabase/PostgreSQL
 
+## Бесплатный backend на Cloudflare Workers
+
+В проекте есть Worker backend в `apps/worker`. Он предназначен для бесплатного запуска API на Cloudflare Workers с Neon PostgreSQL.
+
+Локальная проверка:
+
+```powershell
+npm run build --workspace @wallet/worker
+```
+
+Секреты Cloudflare Worker:
+
+```powershell
+cd apps/worker
+wrangler secret put DATABASE_URL
+wrangler secret put JWT_SECRET
+wrangler secret put TELEGRAM_BOT_TOKEN
+wrangler deploy
+```
+
+`TELEGRAM_WEBHOOK_SECRET` можно добавить отдельно, если включаете проверку заголовка Telegram webhook.
+
+Для GitHub Actions нужны secrets:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+После деплоя Worker нужно указать его URL в GitHub repository variable `VITE_API_URL` и перезапустить workflow `Deploy frontend to GitHub Pages`.
+
 Для production backend должен работать с:
 
 ```dotenv
