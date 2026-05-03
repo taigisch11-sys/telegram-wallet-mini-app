@@ -8,7 +8,7 @@ export function UpcomingList({ items, onNavigatePlan }: { items: UpcomingEventDt
     <section>
       <div className="mb-3 flex items-center justify-between px-6">
         <h2 className="text-[21px] font-extrabold text-[#8f8f95]">Ближайшее</h2>
-        <button type="button" className="text-[16px] font-semibold text-[#55a7ff]" onClick={onNavigatePlan}>
+        <button type="button" className="text-[16px] font-semibold text-action" onClick={onNavigatePlan}>
           Все
         </button>
       </div>
@@ -27,7 +27,7 @@ export function UpcomingList({ items, onNavigatePlan }: { items: UpcomingEventDt
 
         {items.map((item) => (
           <button key={item.id} className="wallet-row w-full text-left" type="button" onClick={onNavigatePlan}>
-            <div className={`wallet-token ${item.kind === "income" ? "bg-[#1f6f48] text-[#36d985]" : "bg-[#4a2028] text-[#ff6b73]"}`}>
+            <div className={`wallet-token ${item.kind === "income" ? "wallet-token--positive" : "wallet-token--danger"}`}>
               {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
             <div className="min-w-0 flex-1">

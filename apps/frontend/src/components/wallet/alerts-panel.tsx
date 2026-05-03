@@ -6,7 +6,7 @@ export function AlertsPanel({ alerts }: { alerts: AlertDto[] }) {
   if (!alerts.length) {
     return (
       <Card className="flex items-center gap-3">
-        <div className="wallet-token bg-[#1f6f48] text-[#36d985]">
+        <div className="wallet-token wallet-token--positive">
           <CheckCircle2 size={25} />
         </div>
         <div>
@@ -20,9 +20,9 @@ export function AlertsPanel({ alerts }: { alerts: AlertDto[] }) {
   return (
     <div className="space-y-3">
       {alerts.map((alert) => (
-        <Card key={alert.id} className={alert.level === "high" ? "ring-1 ring-[#ff6b73]/45" : "ring-1 ring-[#f2c45d]/45"}>
+        <Card key={alert.id} className={alert.level === "high" ? "ring-1 ring-danger/45" : "ring-1 ring-amber/45"}>
           <div className="flex gap-3">
-            <div className={`wallet-token ${alert.level === "high" ? "bg-[#4a2028] text-[#ff6b73]" : "bg-[#493b1f] text-[#f2c45d]"}`}>
+            <div className={`wallet-token ${alert.level === "high" ? "wallet-token--danger" : "wallet-token--warning"}`}>
               <AlertTriangle size={25} />
             </div>
             <div>

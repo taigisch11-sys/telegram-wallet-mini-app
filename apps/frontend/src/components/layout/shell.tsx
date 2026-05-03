@@ -39,7 +39,7 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
           {periodLabel}
         </div>
         <button
-          className="grid h-11 w-11 place-items-center rounded-full bg-[#2f8cff] text-white shadow-[0_12px_28px_rgba(47,140,255,0.32)]"
+          className="wallet-fab grid h-11 w-11 place-items-center rounded-full"
           type="button"
           aria-expanded={quickOpen}
           aria-label="Открыть быстрые действия"
@@ -59,7 +59,7 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
                   type="button"
                   onClick={() => navigateQuick(action.target)}
                 >
-                  <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-[#2f8cff]/18 text-[#55a7ff]">
+                  <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-action/15 text-action">
                     <Icon size={20} strokeWidth={2.7} />
                   </span>
                   <span className="min-w-0">
@@ -85,12 +85,12 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
                 className={`flex min-h-[58px] flex-col items-center justify-center rounded-[24px] px-0.5 text-[10px] font-semibold transition ${
-                  selected ? "bg-[#3f3f46] text-[#4fa1ff] shadow-inner shadow-white/8" : "text-white/82 hover:bg-white/8"
+                  selected ? "wallet-nav-item wallet-nav-item--active" : "wallet-nav-item hover:bg-white/8"
                 }`}
                 aria-label={item.label}
                 type="button"
               >
-                <Icon className={selected ? "text-[#4fa1ff]" : "text-white/86"} size={21} strokeWidth={2.5} />
+                <Icon size={21} strokeWidth={2.5} />
                 <span className="mt-1">{item.label}</span>
               </button>
             );

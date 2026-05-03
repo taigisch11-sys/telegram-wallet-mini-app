@@ -61,10 +61,10 @@ export function LearningCoach({
   }
 
   return (
-    <section className="mb-4 rounded-[28px] border border-[#4c9cff]/35 bg-[#14345f]/70 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+    <section className="mb-4 rounded-[28px] border border-action/35 bg-actionSoft/70 p-4 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#8bd3ff]">Обучение включено</p>
+          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-action">Обучение включено</p>
           <h2 className="mt-1 text-xl font-extrabold text-white">{current.title}</h2>
         </div>
         <button type="button" aria-label="Выключить обучение" className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white" onClick={onClose}>
@@ -74,7 +74,7 @@ export function LearningCoach({
       <p className="text-sm font-semibold leading-5 text-[#c9ddff]">{current.text}</p>
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-extrabold text-white">
-          <CheckCircle2 size={18} className="text-[#32d178]" />
+          <CheckCircle2 size={18} className="text-positive" />
           Шаг {step + 1} из {steps.length}
         </div>
         <div className="flex items-center gap-2">

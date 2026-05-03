@@ -36,7 +36,7 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
       <div className="space-y-3">
         {fixedItems.map((item) => (
           <div key={item.id} className="wallet-row bg-[#232326]">
-            <div className={`wallet-token ${item.kind === "income" ? "bg-[#1f6f48] text-[#36d985]" : item.kind === "debt_repayment" || item.kind === "transfer" ? "bg-[#1d395c] text-[#8bd3ff]" : "bg-[#4a2028] text-[#ff6b73]"}`}>
+            <div className={`wallet-token ${item.kind === "income" ? "wallet-token--positive" : item.kind === "debt_repayment" || item.kind === "transfer" ? "wallet-token--action-soft" : "wallet-token--danger"}`}>
               {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
             <div className="min-w-0 flex-1">
@@ -46,13 +46,13 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
                 <span> • {shortDate(item.date)}</span>
               </p>
             </div>
-            <p className={`text-[17px] font-extrabold ${item.amount >= 0 ? "text-[#36d985]" : item.kind === "debt_repayment" || item.kind === "transfer" ? "text-[#8bd3ff]" : "text-[#ff6b73]"}`}>{money(item.amount)}</p>
+            <p className={`text-[17px] font-extrabold ${item.amount >= 0 ? "text-positive" : item.kind === "debt_repayment" || item.kind === "transfer" ? "text-action" : "text-danger"}`}>{money(item.amount)}</p>
           </div>
         ))}
 
         {hasDistributedMovement ? (
           <div className="wallet-row bg-[#232326]">
-            <div className="wallet-token bg-[#34343a] text-[#8bd3ff]">
+            <div className="wallet-token wallet-token--warning">
               <Blend size={24} />
             </div>
             <div className="min-w-0 flex-1">
@@ -60,8 +60,8 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
               <p className="text-[14px] font-semibold text-[#9a9aa0]">Распределяется между сверками</p>
             </div>
             <div className="text-right">
-              <p className={`text-[17px] font-extrabold ${additional >= 0 ? "text-[#36d985]" : "text-[#ff6b73]"}`}>{money(additional)}</p>
-              <CheckCircle2 className="ml-auto mt-1 text-[#8bd3ff]" size={16} />
+              <p className={`text-[17px] font-extrabold ${additional >= 0 ? "text-positive" : "text-danger"}`}>{money(additional)}</p>
+              <CheckCircle2 className="ml-auto mt-1 text-amber" size={16} />
             </div>
           </div>
         ) : null}

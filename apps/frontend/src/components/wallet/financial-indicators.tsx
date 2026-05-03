@@ -105,15 +105,15 @@ function formatDecimal(value: number) {
 }
 
 function toneClass(tone: string) {
-  if (tone === "risk") return "text-[#ff6b73]";
-  if (tone === "warn") return "text-[#f2c45d]";
-  if (tone === "good") return "text-[#32d178]";
-  return "text-[#8bd3ff]";
+  if (tone === "risk") return "text-danger";
+  if (tone === "warn") return "text-amber";
+  if (tone === "good") return "text-positive";
+  return "text-action";
 }
 
 function dotClass(tone: string) {
-  if (tone === "risk") return "bg-[#ff6b73]";
-  if (tone === "warn") return "bg-[#f2c45d]";
-  if (tone === "good") return "bg-[#32d178]";
-  return "bg-[#8bd3ff]";
+  if (tone === "risk") return "bg-danger";
+  if (tone === "warn") return "bg-amber";
+  if (tone === "good") return "bg-positive";
+  return "bg-action";
 }

@@ -353,7 +353,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
             <div className="grid grid-cols-[1fr_104px_42px] gap-2">
               <input aria-label="Название погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Погашение кредитки" value={repaymentName} onChange={(event) => setRepaymentName(event.target.value)} />
               <input aria-label="Сумма погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right" inputMode="decimal" value={repaymentAmount} onChange={(event) => setRepaymentAmount(event.target.value)} />
-              <button className="grid place-items-center rounded-md bg-mint text-ink" type="button" onClick={() => void addDebtRepayment()} aria-label="Добавить погашение долга">
+              <button className="grid place-items-center rounded-md bg-action text-white" type="button" onClick={() => void addDebtRepayment()} aria-label="Добавить погашение долга">
                 <Plus size={18} />
               </button>
               <input className="col-span-3 rounded-md border border-line bg-ink px-3 py-2 text-sm" type="date" value={repaymentDate} onChange={(event) => setRepaymentDate(event.target.value)} aria-label="Дата погашения" />
@@ -405,7 +405,7 @@ function PlanForm({
         {amountLabel}
         <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={amount} onChange={(event) => onAmount(event.target.value)} />
       </label>
-      <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink sm:mt-5 sm:w-11 sm:px-0" type="button" onClick={onSubmit} aria-label={actionLabel}>
+      <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:mt-5 sm:w-11 sm:px-0" type="button" onClick={onSubmit} aria-label={actionLabel}>
         <Plus size={18} />
         <span className="sm:hidden">{actionLabel}</span>
       </button>
@@ -435,9 +435,9 @@ function ScheduleBuilder({
 }) {
   return (
     <div className="mt-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-3">
-      <button type="button" className="flex w-full items-center justify-between text-left text-sm font-extrabold text-[#55a7ff]" onClick={onToggle}>
+      <button type="button" className="flex w-full items-center justify-between text-left text-sm font-extrabold text-action" onClick={onToggle}>
         Создать график
-        <span className="rounded-full bg-[#2f8cff]/15 px-2 py-1 text-xs text-[#8bd3ff]">{enabled ? "включён" : "ежемесячно"}</span>
+        <span className="rounded-full bg-action/15 px-2 py-1 text-xs text-action">{enabled ? "включён" : "ежемесячно"}</span>
       </button>
       {enabled ? (
         <div className="mt-3 space-y-3">
@@ -479,7 +479,7 @@ function PlanRow({ item, tone, onDone, onDelete }: { item: IncomeDto | PaymentDt
 
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
-      <WalletCards className={tone === "income" ? "text-mint" : item.status === "overdue" ? "text-danger" : "text-amber"} size={20} />
+      <WalletCards className={tone === "income" ? "text-positive" : item.status === "overdue" ? "text-danger" : "text-amber"} size={20} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold">{item.name}</p>
         <p className="text-xs text-slate-500">{planDate(item.effectiveDate)}</p>
@@ -489,7 +489,7 @@ function PlanRow({ item, tone, onDone, onDelete }: { item: IncomeDto | PaymentDt
         <Badge status={item.status} />
       </div>
       {canMarkDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md bg-mint text-ink" type="button" onClick={onDone} aria-label={tone === "income" ? "Получено" : "Оплачено"}>
+        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f]" type="button" onClick={onDone} aria-label={tone === "income" ? "Получено" : "Оплачено"}>
           <Check size={17} />
         </button>
       ) : null}
@@ -504,7 +504,7 @@ function DebtBalance({ label, amount, tone }: { label: string; amount: string; t
   return (
     <div className="rounded-[18px] bg-[#202024] p-3">
       <p className="truncate text-xs font-bold text-slate-400">{label}</p>
-      <p className={`mt-1 text-base font-extrabold ${tone === "debt" ? "text-[#ff6b73]" : "text-white"}`}>{money(amount)}</p>
+      <p className={`mt-1 text-base font-extrabold ${tone === "debt" ? "text-danger" : "text-white"}`}>{money(amount)}</p>
     </div>
   );
 }
@@ -513,7 +513,7 @@ function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDt
   const isDone = item.status === "done";
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
-      <WalletCards className="text-[#55a7ff]" size={20} />
+      <WalletCards className="text-action" size={20} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold">{item.name}</p>
         <p className="text-xs text-slate-500">Погашение долга • {planDate(item.effectiveDate)}</p>
@@ -523,7 +523,7 @@ function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDt
         <Badge status={item.status} />
       </div>
       {!isDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md bg-mint text-ink" type="button" onClick={onDone} aria-label="Погашение выполнено">
+        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f]" type="button" onClick={onDone} aria-label="Погашение выполнено">
           <Check size={17} />
         </button>
       ) : null}

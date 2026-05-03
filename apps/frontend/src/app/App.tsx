@@ -67,8 +67,8 @@ export function App() {
   return (
     <Shell active={screen} onNavigate={setScreen}>
       {demoEnabled ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[24px] border border-[#32d178]/40 bg-[#123926] px-4 py-3 text-sm font-extrabold text-[#b8ffd8]">
-          <span className="rounded-full bg-[#32d178] px-2 py-1 text-xs text-[#07160f]">Демо-режим</span>
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[24px] border border-positive/40 bg-positiveSoft px-4 py-3 text-sm font-extrabold text-[#b8ffd8]">
+          <span className="rounded-full bg-positive px-2 py-1 text-xs text-[#07160f]">Демо-режим</span>
           <span>Показаны примерные данные, реальные записи не меняются.</span>
         </div>
       ) : null}

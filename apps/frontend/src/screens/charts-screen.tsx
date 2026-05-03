@@ -32,18 +32,18 @@ export function ChartsScreen({ demoData }: { demoData?: Record<ChartPeriod, Time
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-1 rounded-md border border-line bg-panel p-1">
         {periods.map((item) => (
-          <button key={item} type="button" onClick={() => setPeriod(item)} className={`rounded px-2 py-2 text-xs font-bold ${period === item ? "bg-mint text-ink" : "text-slate-400"}`}>
+          <button key={item} type="button" onClick={() => setPeriod(item)} className={`rounded px-2 py-2 text-xs font-bold ${period === item ? "bg-action text-white" : "text-slate-400"}`}>
             {periodLabels[item]}
           </button>
         ))}
       </div>
-      <div className="rounded-[22px] border border-white/10 bg-[#202024] px-4 py-3 text-sm font-extrabold text-[#8bd3ff]">
+      <div className="rounded-[22px] border border-white/10 bg-[#202024] px-4 py-3 text-sm font-extrabold text-action">
         {periodLabels[period]} · {data.length} {pointWord(data.length)}
       </div>
       <Chart title="Чистый баланс" data={data} keyName="netBalance" color="#5cf0b2" />
-      <Chart title="Деньги на счетах" data={data} keyName="accountBalance" color="#f2c45d" />
+      <Chart title="Деньги на счетах" data={data} keyName="accountBalance" color="#2f8cff" />
       <Chart title="Долги" data={data} keyName="debtBalance" color="#ff6b73" />
-      <Chart title="Нераспределённые расходы" data={data} keyName="additionalExpenses" color="#8bd3ff" />
+      <Chart title="Нераспределённые расходы" data={data} keyName="additionalExpenses" color="#f2c45d" />
     </div>
   );
 }

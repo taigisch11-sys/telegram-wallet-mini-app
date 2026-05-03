@@ -44,7 +44,7 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
 
   return (
     <div className="space-y-5">
-      {wallet.error ? <div className="rounded-[22px] border border-[#f2c45d]/35 bg-[#f2c45d]/10 p-3 text-sm font-semibold text-[#f2c45d]">{wallet.error}. Показаны локальные данные.</div> : null}
+      {wallet.error ? <div className="rounded-[22px] border border-amber/35 bg-amber/10 p-3 text-sm font-semibold text-amber">{wallet.error}. Показаны локальные данные.</div> : null}
 
       <BalanceHero
         currentBalance={money(state.balances.currentBalance)}
@@ -60,7 +60,7 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
           subtitle={state.accounts.length ? `${state.accounts.length} активных` : "Добавьте карту, вклад или наличные"}
           amount={money(state.balances.accountBalance)}
           icon="card"
-          tone="blue"
+          tone="account"
           onClick={() => onNavigate("accounts")}
         />
         {topAccounts.map((account) => (
@@ -82,7 +82,7 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
           subtitle={state.debts.length ? "Долговая нагрузка" : "Долгов пока нет"}
           amount={money(state.balances.debtBalance)}
           icon="debt"
-          tone="green"
+          tone="debt"
           onClick={() => onNavigate("accounts")}
         />
         {topDebts.map((debt) => (
@@ -110,11 +110,11 @@ function WalletAssetRow({
   subtitle: string;
   amount: string;
   icon: "card" | "debt";
-  tone: "blue" | "green";
+  tone: "account" | "debt";
   onClick: () => void;
 }) {
   const Icon = icon === "card" ? CreditCard : Banknote;
-  const toneClass = tone === "blue" ? "bg-[#2d7dff]" : "bg-[#22c77a]";
+  const toneClass = tone === "account" ? "wallet-token--action" : "wallet-token--danger";
   return (
     <button className="wallet-row w-full text-left" type="button" onClick={onClick}>
       <div className={`wallet-token ${toneClass}`}>
@@ -167,7 +167,7 @@ function AccountRow({
         <div className="mt-3 grid grid-cols-[1fr_42px_42px] gap-2">
           <input
             aria-label={`Новый остаток ${account.name}`}
-            className="min-w-0 rounded-[16px] border border-white/10 bg-[#1b1b1f] px-3 py-2 text-right text-[17px] font-extrabold text-white outline-none focus:border-[#55a7ff]"
+            className="min-w-0 rounded-[16px] border border-white/10 bg-[#1b1b1f] px-3 py-2 text-right text-[17px] font-extrabold text-white outline-none focus:border-action"
             inputMode="decimal"
             value={editBalance}
             onChange={(event) => onChangeEditBalance(event.target.value)}
@@ -178,7 +178,7 @@ function AccountRow({
           />
           <button
             aria-label={`Сохранить счёт ${account.name}`}
-            className="grid h-11 w-11 place-items-center rounded-[16px] bg-[#32d178] text-[#07160f] disabled:opacity-60"
+            className="grid h-11 w-11 place-items-center rounded-[16px] bg-action text-white disabled:opacity-60"
             disabled={isSaving}
             type="button"
             onClick={onSave}
@@ -207,7 +207,7 @@ function AccountRow({
       </button>
       <button
         aria-label={`Изменить счёт ${account.name}`}
-        className="grid h-10 w-10 flex-none place-items-center rounded-full bg-[#34343a] text-[#55a7ff]"
+        className="grid h-10 w-10 flex-none place-items-center rounded-full bg-[#34343a] text-action"
         type="button"
         onClick={onStartEdit}
       >
@@ -220,7 +220,7 @@ function AccountRow({
 function DebtRow({ debt, onClick }: { debt: DebtDto; onClick: () => void }) {
   return (
     <button className="wallet-row w-full bg-[#232326] text-left" type="button" onClick={onClick}>
-      <div className="wallet-token bg-[#3d2630] text-[#ff6b73]">
+      <div className="wallet-token wallet-token--danger">
         <TrendingUp size={25} />
       </div>
       <div className="min-w-0 flex-1">
@@ -228,7 +228,7 @@ function DebtRow({ debt, onClick }: { debt: DebtDto; onClick: () => void }) {
         <p className="text-[14px] font-semibold text-[#8f8f95]">Обязательство</p>
       </div>
       <div className="flex items-center gap-2 text-right">
-        <p className="text-[18px] font-bold text-[#ff6b73]">{money(debt.amount)}</p>
+        <p className="text-[18px] font-bold text-danger">{money(debt.amount)}</p>
         <ChevronRight className="text-[#6f6f75]" size={21} />
       </div>
     </button>

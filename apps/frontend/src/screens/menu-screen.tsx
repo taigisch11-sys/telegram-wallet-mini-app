@@ -40,7 +40,7 @@ export function MenuScreen({
     <div className="space-y-3">
       <Card>
         <div className="mb-4 flex items-center gap-3">
-          <div className="wallet-token h-12 w-12 bg-[#2d7dff]">
+          <div className="wallet-token wallet-token--action h-12 w-12">
             <FlaskConical size={23} />
           </div>
           <div>
@@ -69,7 +69,7 @@ export function MenuScreen({
         <div className="space-y-2">
           {userFunctionChecklist.map((item) => (
             <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-              <CheckCircle2 className="mt-0.5 flex-none text-[#32d178]" size={17} />
+              <CheckCircle2 className="mt-0.5 flex-none text-positive" size={17} />
               <p className="text-sm font-semibold leading-5 text-slate-200">{item}</p>
             </div>
           ))}
@@ -81,7 +81,7 @@ export function MenuScreen({
         <div className="space-y-2">
           {financialIndicatorChecklist.map((item) => (
             <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-              <CheckCircle2 className="mt-0.5 flex-none text-[#8bd3ff]" size={17} />
+              <CheckCircle2 className="mt-0.5 flex-none text-action" size={17} />
               <p className="text-sm font-semibold leading-5 text-slate-200">{item}</p>
             </div>
           ))}
@@ -107,11 +107,11 @@ function ModeButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={`rounded-[24px] border p-3 text-left transition ${active ? "border-[#32d178]/60 bg-[#123926]" : "border-white/10 bg-[#202024]"}`} onClick={onClick}>
-      <Icon className={active ? "text-[#32d178]" : "text-[#55a7ff]"} size={24} />
+    <button type="button" className={`rounded-[24px] border p-3 text-left transition ${active ? "border-positive/60 bg-positiveSoft" : "border-white/10 bg-[#202024]"}`} onClick={onClick}>
+      <Icon className={active ? "text-positive" : "text-action"} size={24} />
       <p className="mt-3 text-base font-extrabold text-white">{title}</p>
       <p className="mt-1 min-h-[38px] text-xs font-semibold leading-4 text-slate-400">{text}</p>
-      <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-extrabold ${active ? "bg-[#32d178] text-[#07160f]" : "bg-white text-[#1b1b1d]"}`}>{action}</span>
+      <span className={`mt-3 inline-flex rounded-full px-3 py-1 text-xs font-extrabold ${active ? "bg-positive text-[#07160f]" : "bg-action text-white"}`}>{action}</span>
     </button>
   );
 }
@@ -119,7 +119,7 @@ function ModeButton({
 function QuickButton({ label, icon: Icon, onClick }: { label: string; icon: typeof Clock3; onClick: () => void }) {
   return (
     <button type="button" className="grid min-h-[74px] place-items-center rounded-[20px] bg-[#2b2b2f] text-sm font-extrabold text-white" onClick={onClick}>
-      <Icon className="text-[#55a7ff]" size={22} />
+      <Icon className="text-action" size={22} />
       {label}
     </button>
   );

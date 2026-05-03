@@ -8,6 +8,17 @@
   color: #f7f7f8;
   background: #000;
   font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --wallet-action: #2f8cff;
+  --wallet-action-soft: #1d395c;
+  --wallet-positive: #32d178;
+  --wallet-positive-soft: #174f31;
+  --wallet-warning: #f2c45d;
+  --wallet-warning-soft: #493b1f;
+  --wallet-danger: #ff6b73;
+  --wallet-danger-soft: #4a2028;
+  --wallet-surface: #2b2b2f;
+  --wallet-surface-raised: #34343a;
+  --wallet-muted: #9a9aa0;
 }
 
 * {
@@ -71,7 +82,7 @@ button {
   gap: 7px;
   border-radius: 18px;
   background: #2d2d31;
-  color: #4c9cff;
+  color: var(--wallet-action);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -91,6 +102,45 @@ button {
 .wallet-action:active {
   transform: scale(0.97);
   background: #38383d;
+}
+
+.wallet-action-primary {
+  background: var(--wallet-action);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(47, 140, 255, 0.28);
+}
+
+.wallet-action-primary:active {
+  background: #247ce8;
+}
+
+.wallet-fab {
+  background: var(--wallet-action);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(47, 140, 255, 0.32);
+}
+
+.wallet-fab:active {
+  transform: scale(0.96);
+  background: #247ce8;
+}
+
+.wallet-nav-item {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.wallet-nav-item svg {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.wallet-nav-item--active {
+  background: rgba(47, 140, 255, 0.15);
+  color: var(--wallet-action);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.wallet-nav-item--active svg {
+  color: var(--wallet-action);
 }
 
 .wallet-row {
@@ -113,6 +163,39 @@ button {
   border-radius: 999px;
   color: #fff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.wallet-token--action {
+  background: var(--wallet-action);
+  color: #fff;
+}
+
+.wallet-token--action-soft {
+  background: var(--wallet-action-soft);
+  color: var(--wallet-action);
+}
+
+.wallet-token--positive {
+  background: var(--wallet-positive-soft);
+  color: var(--wallet-positive);
+}
+
+.wallet-token--warning {
+  background: var(--wallet-warning-soft);
+  color: var(--wallet-warning);
+}
+
+.wallet-token--danger {
+  background: var(--wallet-danger-soft);
+  color: var(--wallet-danger);
+}
+
+.text-wallet-action {
+  color: var(--wallet-action);
+}
+
+.bg-wallet-action {
+  background: var(--wallet-action);
 }
 
 .scrollbar-none {

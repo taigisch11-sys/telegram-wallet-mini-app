@@ -116,7 +116,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
             <h2 className="text-lg font-extrabold">Счета</h2>
             <p className="text-sm text-slate-400">Карты, вклады и наличные</p>
           </div>
-          <span className="font-bold text-mint">{money(wallet.data.balances.accountBalance)}</span>
+          <span className="font-bold text-action">{money(wallet.data.balances.accountBalance)}</span>
         </div>
 
         <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_124px]">
@@ -128,7 +128,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
             Остаток
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newAccountBalance} onChange={(event) => setNewAccountBalance(event.target.value)} />
           </label>
-          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink sm:col-span-2" type="button" onClick={() => void addAccount()}>
+          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addAccount()}>
             <Plus size={18} />
             Добавить счёт
           </button>
@@ -176,7 +176,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
             Сумма долга
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newDebtAmount} onChange={(event) => setNewDebtAmount(event.target.value)} />
           </label>
-          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-danger px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addDebt()}>
+          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addDebt()}>
             <Plus size={18} />
             Добавить долговой счёт
           </button>
@@ -207,7 +207,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
           Итог после корректировки
           <input className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-3 text-lg font-bold" inputMode="decimal" value={editedBalance} onChange={(event) => setEditedBalance(event.target.value)} />
         </label>
-        <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink" type="button" onClick={() => void reconcile()}>
+        <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white" type="button" onClick={() => void reconcile()}>
           <RefreshCw size={18} />
           Сохранить остатки
         </button>

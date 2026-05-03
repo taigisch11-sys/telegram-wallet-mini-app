@@ -35,8 +35,8 @@ export function BalanceHero({
       <p className="text-[18px] font-extrabold text-white">Свободно сейчас</p>
       <div className="mt-3 text-[56px] font-extrabold leading-none tracking-[-0.06em] text-white">{freeMoney}</div>
       <div className="mt-4 flex items-center justify-center gap-2 text-[16px] font-extrabold">
-        <span className="text-[#32d178]">{currentBalance}</span>
-        <span className="rounded-full bg-[#174f31] px-2.5 py-1 text-[#32d178]">остаток</span>
+        <span className="text-positive">{currentBalance}</span>
+        <span className="rounded-full bg-positiveSoft px-2.5 py-1 text-positive">остаток</span>
         <span className="text-[#9a9aa0]">после плана</span>
       </div>
 
@@ -64,7 +64,7 @@ function Metric({ label, value, danger = false }: { label: string; value: string
   return (
     <div className="rounded-[22px] bg-[#2b2b2f] px-4 py-3">
       <p className="text-[12px] font-semibold text-[#9a9aa0]">{label}</p>
-      <p className={`mt-1 text-[16px] font-extrabold ${danger ? "text-[#ff6b73]" : "text-white"}`}>{value}</p>
+      <p className={`mt-1 text-[16px] font-extrabold ${danger ? "text-danger" : "text-white"}`}>{value}</p>
     </div>
   );
 }
