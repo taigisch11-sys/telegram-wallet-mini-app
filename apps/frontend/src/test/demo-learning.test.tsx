@@ -39,5 +39,10 @@ describe("Demo and learning modes", () => {
 
     fireEvent.click(screen.getByText("Перейти к счетам"));
     expect(screen.getByText("Сохранить остатки")).toBeInTheDocument();
+    expect(screen.getByText("Шаг 2 из 5")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Назад"));
+    expect(screen.getByText("Шаг 1 из 5")).toBeInTheDocument();
+    expect(screen.getByText("Начните со сверки")).toBeInTheDocument();
   });
 });

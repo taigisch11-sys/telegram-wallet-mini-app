@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, X } from "lucide-react";
 import type { Screen } from "../../app/App";
 
 const steps: { title: string; text: string; action: string; target: Screen }[] = [
@@ -47,10 +47,17 @@ export function LearningCoach({
 }) {
   const current = steps[Math.min(step, steps.length - 1)];
   const isLast = step >= steps.length - 1;
+  const canGoBack = step > 0;
 
   function go() {
     onNavigate(current.target);
     onStep(Math.min(step + 1, steps.length - 1));
+  }
+
+  function back() {
+    const previousStep = Math.max(step - 1, 0);
+    onStep(previousStep);
+    onNavigate(steps[previousStep].target);
   }
 
   return (
@@ -70,10 +77,18 @@ export function LearningCoach({
           <CheckCircle2 size={18} className="text-[#32d178]" />
           Шаг {step + 1} из {steps.length}
         </div>
-        <button type="button" className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-[#10213d]" onClick={go}>
-          {isLast ? "Повторить маршрут" : current.action}
-          <ArrowRight size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          {canGoBack ? (
+            <button type="button" className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-sm font-extrabold text-white" onClick={back}>
+              <ArrowLeft size={16} />
+              Назад
+            </button>
+          ) : null}
+          <button type="button" className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-[#10213d]" onClick={go}>
+            {isLast ? "Повторить маршрут" : current.action}
+            <ArrowRight size={16} />
+          </button>
+        </div>
       </div>
     </section>
   );
