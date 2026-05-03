@@ -37,7 +37,8 @@ export function useWalletState() {
   async function refresh() {
     try {
       setError(null);
-      await authenticate();
+      const hasTelegramSession = await authenticate();
+      if (!hasTelegramSession) return;
       const next = await api.state();
       setData(next);
     } catch (err) {

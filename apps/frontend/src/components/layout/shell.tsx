@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, CreditCard, Home, ListChecks } from "lucide-react";
+import { BarChart3, Clock3, CreditCard, Home, ListChecks, MoreHorizontal, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Screen } from "../../app/App";
 
@@ -12,19 +12,28 @@ const items: { id: Screen; label: string; icon: typeof Home }[] = [
 
 export function Shell({ active, onNavigate, children }: { active: Screen; onNavigate: (screen: Screen) => void; children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-24 pt-5 text-slate-50">
-      <header className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-mint">Финансы</p>
-          <h1 className="text-xl font-extrabold">Кошелёк</h1>
+    <main className="wallet-shell mx-auto flex min-h-screen w-full max-w-md flex-col px-5 pb-28 pt-7 text-slate-50">
+      <header className="relative mb-5 grid min-h-[68px] grid-cols-[72px_1fr_72px] items-start">
+        <button className="pt-2 text-left text-[17px] font-medium text-[#55a7ff]" type="button">
+          Закрыть
+        </button>
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-1.5">
+            <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">Кошелёк</h1>
+            <ShieldCheck className="fill-[#2f8cff] text-[#2f8cff]" size={21} />
+          </div>
+          <p className="text-[13px] font-semibold text-[#8f8f95]">мини-приложение</p>
         </div>
-        <div className="rounded-md border border-line bg-panel px-3 py-2 text-right text-xs text-slate-300">
-          <span className="block text-slate-500">Мини-приложение</span>
-          <span>Телеграм</span>
+        <div className="flex justify-end pt-1">
+          <button className="grid h-9 w-9 place-items-center rounded-full border border-[#2f8cff]/70 text-[#58a6ff]" type="button" aria-label="Ещё">
+            <MoreHorizontal size={23} />
+          </button>
         </div>
       </header>
+
       <div className="flex-1">{children}</div>
-      <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md border-t border-line bg-ink/95 px-2 py-2 backdrop-blur">
+
+      <nav className="fixed inset-x-0 bottom-4 z-20 mx-auto w-[min(94vw,396px)] rounded-[30px] border border-white/10 bg-[#2b2b30]/88 p-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl">
         <div className="grid grid-cols-5 gap-1">
           {items.map((item) => {
             const Icon = item.icon;
@@ -33,12 +42,13 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`flex min-h-14 flex-col items-center justify-center rounded-md text-[11px] transition ${
-                  selected ? "bg-mint text-ink" : "text-slate-400 hover:bg-panel hover:text-slate-100"
+                className={`flex min-h-[58px] flex-col items-center justify-center rounded-[24px] px-0.5 text-[10px] font-semibold transition ${
+                  selected ? "bg-[#3f3f46] text-[#4fa1ff] shadow-inner shadow-white/8" : "text-white/82 hover:bg-white/8"
                 }`}
                 aria-label={item.label}
+                type="button"
               >
-                <Icon size={18} />
+                <Icon className={selected ? "text-[#4fa1ff]" : "text-white/86"} size={21} strokeWidth={2.5} />
                 <span className="mt-1">{item.label}</span>
               </button>
             );

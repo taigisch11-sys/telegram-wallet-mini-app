@@ -7,5 +7,6 @@ describe("BalanceHero", () => {
     render(<BalanceHero currentBalance="72 300 ₽" calculatedBalance="70 000 ₽" additionalExpenses="2 300 ₽" freeMoney="18 000 ₽" />);
     expect(screen.getByText("72 300 ₽")).toBeInTheDocument();
     expect(screen.getByText("Расчётный баланс")).toBeInTheDocument();
+    expect(screen.getByText("Перевести")).toBeInTheDocument();
   });
 });

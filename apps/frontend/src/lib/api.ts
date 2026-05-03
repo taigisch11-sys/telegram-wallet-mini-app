@@ -27,7 +27,7 @@ export async function authenticate() {
   const initData = getTelegramInitData();
   if (!initData) {
     localStorage.setItem(TOKEN_KEY, "test-token");
-    return;
+    return false;
   }
 
   const response = await request<{ token: string }>("/api/auth/telegram", {
@@ -35,6 +35,7 @@ export async function authenticate() {
     body: JSON.stringify({ initData })
   });
   localStorage.setItem(TOKEN_KEY, response.token);
+  return true;
 }
 
 export const api = {

@@ -5,23 +5,29 @@
 @tailwind utilities;
 
 :root {
-  color: #edf7f2;
-  background: #090c10;
+  color: #f7f7f8;
+  background: #000;
   font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
-    linear-gradient(160deg, rgba(92, 240, 178, 0.14), transparent 34%),
-    radial-gradient(circle at 20% 0%, rgba(242, 196, 93, 0.14), transparent 28%),
-    #090c10;
+    radial-gradient(circle at 50% -12%, rgba(60, 60, 66, 0.72), transparent 32%),
+    linear-gradient(180deg, #050505 0%, #151515 28%, #1b1b1d 100%);
+}
+
+#root {
+  width: 100%;
+  overflow-x: hidden;
 }
 
 button,
@@ -32,6 +38,74 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+.wallet-shell {
+  width: min(100vw, 390px);
+  overflow-x: hidden;
+  background:
+    linear-gradient(180deg, rgba(31, 31, 33, 0.98), rgba(25, 25, 26, 0.98)),
+    #1b1b1c;
+  border-radius: 40px 40px 0 0;
+  box-shadow: 0 -18px 70px rgba(0, 0, 0, 0.52);
+}
+
+.wallet-hero {
+  color: #fff;
+}
+
+.wallet-action {
+  display: flex;
+  min-height: 88px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 18px;
+  background: #2d2d31;
+  color: #4c9cff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 26px rgba(0, 0, 0, 0.2);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.wallet-action span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-action:active {
+  transform: scale(0.97);
+  background: #38383d;
+}
+
+.wallet-row {
+  display: flex;
+  min-height: 86px;
+  align-items: center;
+  gap: 14px;
+  border-radius: 28px;
+  background: #2b2b2f;
+  padding: 12px 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.wallet-token {
+  display: grid;
+  height: 56px;
+  width: 56px;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
 .scrollbar-none {

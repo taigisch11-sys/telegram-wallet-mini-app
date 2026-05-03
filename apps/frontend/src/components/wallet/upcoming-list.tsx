@@ -1,34 +1,44 @@
 import type { UpcomingEventDto } from "@wallet/shared";
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronRight } from "lucide-react";
 import { money, shortDate } from "../../lib/format";
 import { Badge } from "../common/badge";
-import { Card } from "../common/card";
 
 export function UpcomingList({ items }: { items: UpcomingEventDto[] }) {
   return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-extrabold">Ближайшие события</h2>
-        <span className="text-xs text-slate-500">{items.length}</span>
+    <section>
+      <div className="mb-3 flex items-center justify-between px-6">
+        <h2 className="text-[21px] font-extrabold text-[#8f8f95]">Ближайшее</h2>
+        <span className="text-[16px] font-semibold text-[#55a7ff]">Все</span>
       </div>
-      {items.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Событий пока нет.</p> : null}
       <div className="space-y-3">
+        {items.length === 0 ? (
+          <div className="wallet-row">
+            <div className="wallet-token bg-[#34343a] text-[#a1a1a7]">
+              <ChevronRight size={24} />
+            </div>
+            <div>
+              <p className="text-[18px] font-extrabold text-white">Событий пока нет</p>
+              <p className="text-[15px] font-semibold text-[#9a9aa0]">Платежи и доходы появятся здесь.</p>
+            </div>
+          </div>
+        ) : null}
+
         {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-3">
-            <div className={`grid h-9 w-9 place-items-center rounded-md ${item.kind === "income" ? "bg-mint/12 text-mint" : "bg-danger/12 text-danger"}`}>
-              {item.kind === "income" ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
+          <div key={item.id} className="wallet-row">
+            <div className={`wallet-token ${item.kind === "income" ? "bg-[#1f6f48] text-[#36d985]" : "bg-[#4a2028] text-[#ff6b73]"}`}>
+              {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold">{item.title}</p>
-              <p className="text-xs text-slate-500">{shortDate(item.date)}</p>
+              <p className="truncate text-[18px] font-extrabold text-white">{item.title}</p>
+              <p className="text-[15px] font-semibold text-[#9a9aa0]">{shortDate(item.date)}</p>
             </div>
             <div className="text-right">
-              <p className="font-bold">{money(item.amount)}</p>
+              <p className="text-[17px] font-bold text-white">{money(item.amount)}</p>
               <Badge status={item.status} />
             </div>
           </div>
         ))}
       </div>
-    </Card>
+    </section>
   );
 }
