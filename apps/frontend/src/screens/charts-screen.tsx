@@ -5,6 +5,7 @@ import { Card } from "../components/common/card";
 import { api } from "../lib/api";
 
 const periods = ["week", "month", "quarter", "year"] as const;
+export type ChartPeriod = (typeof periods)[number];
 const periodLabels = {
   week: "Неделя",
   month: "Месяц",
@@ -12,13 +13,13 @@ const periodLabels = {
   year: "Год"
 };
 
-export function ChartsScreen({ demoData }: { demoData?: TimeseriesPointDto[] }) {
-  const [period, setPeriod] = useState<(typeof periods)[number]>("month");
+export function ChartsScreen({ demoData }: { demoData?: Record<ChartPeriod, TimeseriesPointDto[]> }) {
+  const [period, setPeriod] = useState<ChartPeriod>("month");
   const [data, setData] = useState<TimeseriesPointDto[]>([]);
 
   useEffect(() => {
     if (demoData) {
-      setData(demoData);
+      setData(demoData[period] ?? []);
       return;
     }
     void api
@@ -36,12 +37,23 @@ export function ChartsScreen({ demoData }: { demoData?: TimeseriesPointDto[] }) 
           </button>
         ))}
       </div>
+      <div className="rounded-[22px] border border-white/10 bg-[#202024] px-4 py-3 text-sm font-extrabold text-[#8bd3ff]">
+        {periodLabels[period]} · {data.length} {pointWord(data.length)}
+      </div>
       <Chart title="Чистый баланс" data={data} keyName="netBalance" color="#5cf0b2" />
       <Chart title="Деньги на счетах" data={data} keyName="accountBalance" color="#f2c45d" />
       <Chart title="Долги" data={data} keyName="debtBalance" color="#ff6b73" />
       <Chart title="Нераспределённые расходы" data={data} keyName="additionalExpenses" color="#8bd3ff" />
     </div>
   );
+}
+
+function pointWord(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "точка";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "точки";
+  return "точек";
 }
 
 function Chart({ title, data, keyName, color }: { title: string; data: TimeseriesPointDto[]; keyName: keyof TimeseriesPointDto; color: string }) {

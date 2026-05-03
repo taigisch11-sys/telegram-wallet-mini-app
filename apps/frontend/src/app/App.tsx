@@ -9,7 +9,7 @@ import { MenuScreen } from "../screens/menu-screen";
 import { PlanScreen } from "../screens/plan-screen";
 import { WalletScreen } from "../screens/wallet-screen";
 import { useWalletState } from "../hooks/use-state";
-import { demoHistory, demoState, demoTimeseries } from "../mock/state";
+import { demoHistory, demoState, demoTimeseriesByPeriod } from "../mock/state";
 
 export type Screen = "wallet" | "plan" | "accounts" | "charts" | "history" | "menu";
 
@@ -59,7 +59,7 @@ export function App() {
     }
     if (screen === "plan") return <PlanScreen wallet={wallet} />;
     if (screen === "accounts") return <AccountsScreen wallet={wallet} />;
-    if (screen === "charts") return <ChartsScreen demoData={demoEnabled ? demoTimeseries : undefined} />;
+    if (screen === "charts") return <ChartsScreen demoData={demoEnabled ? demoTimeseriesByPeriod : undefined} />;
     if (screen === "history") return <HistoryScreen items={demoEnabled ? demoHistory : undefined} />;
     return <WalletScreen wallet={wallet} onNavigate={setScreen} />;
   }, [demoEnabled, learningEnabled, screen, wallet]);
