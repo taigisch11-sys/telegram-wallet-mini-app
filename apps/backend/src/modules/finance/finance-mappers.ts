@@ -1,4 +1,4 @@
-import type { Account, BalanceSnapshot, Debt, History, Income, Payment, Settings, User } from "@prisma/client";
+import type { Account, BalanceSnapshot, Debt, History, Income, Operation, OperationEntry, Payment, PlannedOperation, Settings, User } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { effectiveDate, iso, toMoney } from "./finance-utils";
 
@@ -57,6 +57,46 @@ export function mapPayment(payment: Payment) {
     effectiveDate: date.toISOString(),
     status: payment.status,
     note: payment.note
+  };
+}
+
+export function mapOperation(operation: Operation & { entries: OperationEntry[] }) {
+  return {
+    id: operation.id,
+    kind: operation.kind,
+    name: operation.name,
+    amount: toMoney(operation.amount),
+    operationDate: operation.operationDate.toISOString(),
+    note: operation.note,
+    plannedOperationId: operation.plannedOperationId,
+    seriesId: operation.seriesId,
+    createdAt: operation.createdAt.toISOString(),
+    entries: operation.entries.map((entry) => ({
+      id: entry.id,
+      targetType: entry.targetType as "account" | "debt",
+      targetId: entry.targetId,
+      amount: toMoney(entry.amount)
+    }))
+  };
+}
+
+export function mapPlannedOperation(operation: PlannedOperation) {
+  const date = operation.expectedDate ?? operation.plannedDate;
+  return {
+    id: operation.id,
+    kind: operation.kind,
+    name: operation.name,
+    amount: toMoney(operation.amount),
+    plannedDate: operation.plannedDate.toISOString(),
+    expectedDate: iso(operation.expectedDate),
+    actualDate: iso(operation.actualDate),
+    effectiveDate: date.toISOString(),
+    status: operation.status,
+    note: operation.note,
+    sourceAccountId: operation.sourceAccountId,
+    targetAccountId: operation.targetAccountId,
+    targetDebtId: operation.targetDebtId,
+    seriesId: operation.seriesId
   };
 }
 

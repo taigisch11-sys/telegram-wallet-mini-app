@@ -1,4 +1,4 @@
-import type { DashboardStateDto, HistoryItemDto, TimeseriesPointDto } from "@wallet/shared";
+import type { DashboardStateDto, HistoryItemDto, PlannedOperationDto, TimeseriesPointDto } from "@wallet/shared";
 import { getTelegramInitData } from "./telegram";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
@@ -52,5 +52,8 @@ export const api = {
   createPayment: (body: { name: string; amount: string; plannedDate: string }) => request("/api/payments", { method: "POST", body: JSON.stringify(body) }),
   deletePayment: (id: string) => request(`/api/payments/${id}`, { method: "DELETE" }),
   markPayment: (id: string) => request(`/api/payments/${id}/mark-paid`, { method: "PATCH", body: JSON.stringify({}) }),
+  createPlannedOperation: (body: Partial<PlannedOperationDto>) => request("/api/planned-operations", { method: "POST", body: JSON.stringify(body) }),
+  markPlannedOperation: (id: string) => request(`/api/planned-operations/${id}/mark-done`, { method: "PATCH", body: JSON.stringify({}) }),
+  deletePlannedOperation: (id: string) => request(`/api/planned-operations/${id}`, { method: "DELETE" }),
   reconcile: (body: unknown) => request("/api/accounts/reconcile", { method: "POST", body: JSON.stringify(body) })
 };

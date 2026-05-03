@@ -24,19 +24,39 @@ enum PaymentStatus {
   cancelled
 }
 
+enum OperationKind {
+  income
+  expense
+  transfer
+  debt_repayment
+  adjustment
+  unallocated
+}
+
+enum PlannedOperationStatus {
+  planned
+  overdue
+  done
+  skipped
+  cancelled
+}
+
 model User {
-  id         String            @id @default(cuid())
-  telegramId String            @unique
-  username   String?
-  firstName  String?
-  createdAt  DateTime          @default(now())
-  accounts   Account[]
-  debts      Debt[]
-  incomes    Income[]
-  payments   Payment[]
-  settings   Settings?
-  snapshots  BalanceSnapshot[]
-  history    History[]
+  id                String             @id @default(cuid())
+  telegramId        String             @unique
+  username          String?
+  firstName         String?
+  createdAt         DateTime           @default(now())
+  accounts          Account[]
+  debts             Debt[]
+  incomes           Income[]
+  payments          Payment[]
+  operations        Operation[]
+  plannedOperations PlannedOperation[]
+  operationSeries   OperationSeries[]
+  settings          Settings?
+  snapshots         BalanceSnapshot[]
+  history           History[]
 }
 
 model Account {
@@ -91,6 +111,79 @@ model Payment {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, plannedDate])
+}
+
+model OperationSeries {
+  id                String             @id @default(cuid())
+  userId            String
+  name              String
+  kind              OperationKind
+  defaultAmount     Decimal            @db.Decimal(14, 2)
+  finalAmount       Decimal?           @db.Decimal(14, 2)
+  startDate         DateTime
+  count             Int
+  sourceAccountId   String?
+  targetAccountId   String?
+  targetDebtId      String?
+  createdAt         DateTime           @default(now())
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedOperations PlannedOperation[]
+
+  @@index([userId, createdAt])
+}
+
+model PlannedOperation {
+  id              String                 @id @default(cuid())
+  userId          String
+  kind            OperationKind
+  name            String
+  amount          Decimal                @db.Decimal(14, 2)
+  plannedDate     DateTime
+  expectedDate    DateTime?
+  actualDate      DateTime?
+  status          PlannedOperationStatus
+  note            String?
+  sourceAccountId String?
+  targetAccountId String?
+  targetDebtId    String?
+  seriesId        String?
+  createdAt       DateTime               @default(now())
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  series          OperationSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+
+  @@index([userId, plannedDate])
+  @@index([seriesId])
+}
+
+model Operation {
+  id                 String           @id @default(cuid())
+  userId             String
+  kind               OperationKind
+  name               String
+  amount             Decimal          @db.Decimal(14, 2)
+  operationDate      DateTime
+  note               String?
+  plannedOperationId String?
+  seriesId           String?
+  createdAt          DateTime         @default(now())
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entries            OperationEntry[]
+
+  @@index([userId, operationDate])
+  @@index([plannedOperationId])
+}
+
+model OperationEntry {
+  id          String    @id @default(cuid())
+  operationId String
+  targetType  String
+  targetId    String
+  amount      Decimal   @db.Decimal(14, 2)
+  createdAt   DateTime  @default(now())
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@index([operationId])
+  @@index([targetType, targetId])
 }
 
 model Settings {

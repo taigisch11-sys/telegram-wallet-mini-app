@@ -10,12 +10,16 @@ import {
   createDebt,
   createIncome,
   createPayment,
+  createPlannedOperation,
+  createPlannedOperationSeries,
   dashboardState,
   deleteAccount,
   deleteDebt,
   deleteIncome,
   deletePayment,
+  deletePlannedOperation,
   history,
+  markPlannedOperationDone,
   reconcile,
   timeseries,
   updateIncome,
@@ -168,12 +172,16 @@ app.patch("/api/income/:id", async (c) => {
 app.patch("/api/income/:id/mark-received", async (c) => {
   const user = await authUser(c);
   const body = markDoneSchema.parse(await c.req.json().catch(() => ({})));
-  await sql(c.env)`
+  const rows = await sql(c.env)`
     UPDATE "Income"
     SET status = CASE WHEN "plannedDate"::date >= CURRENT_DATE THEN 'received_on_time'::"IncomeStatus" ELSE 'received_late'::"IncomeStatus" END,
         "actualDate" = ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}
     WHERE id = ${c.req.param("id")} AND "userId" = ${user.id}
+    RETURNING name, amount
   `;
+  if (rows[0]) {
+    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "createdAt") VALUES (${id()}, ${user.id}, 'income'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}, 'Доход получен', NOW())`;
+  }
   await sql(c.env)`INSERT INTO "History" (id, "userId", type, payload, "createdAt") VALUES (${id()}, ${user.id}, 'income_received', ${JSON.stringify({ id: c.req.param("id") })}, NOW())`;
   return c.json({ ok: true });
 });
@@ -201,12 +209,16 @@ app.patch("/api/payments/:id", async (c) => {
 app.patch("/api/payments/:id/mark-paid", async (c) => {
   const user = await authUser(c);
   const body = markDoneSchema.parse(await c.req.json().catch(() => ({})));
-  await sql(c.env)`
+  const rows = await sql(c.env)`
     UPDATE "Payment"
     SET status = CASE WHEN "plannedDate"::date >= CURRENT_DATE THEN 'paid_on_time'::"PaymentStatus" ELSE 'paid_late'::"PaymentStatus" END,
         "actualDate" = ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}
     WHERE id = ${c.req.param("id")} AND "userId" = ${user.id}
+    RETURNING name, amount
   `;
+  if (rows[0]) {
+    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "createdAt") VALUES (${id()}, ${user.id}, 'expense'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}, 'Платёж исполнен', NOW())`;
+  }
   await sql(c.env)`INSERT INTO "History" (id, "userId", type, payload, "createdAt") VALUES (${id()}, ${user.id}, 'payment_paid', ${JSON.stringify({ id: c.req.param("id") })}, NOW())`;
   return c.json({ ok: true });
 });
@@ -214,6 +226,37 @@ app.patch("/api/payments/:id/mark-paid", async (c) => {
 app.delete("/api/payments/:id", async (c) => {
   const user = await authUser(c);
   return c.json(await deletePayment(c.env, user.id, c.req.param("id")));
+});
+
+app.get("/api/operations", async (c) => {
+  const user = await authUser(c);
+  return c.json((await dashboardState(c.env, user.id)).operations);
+});
+
+app.get("/api/planned-operations", async (c) => {
+  const user = await authUser(c);
+  return c.json((await dashboardState(c.env, user.id)).plannedOperations);
+});
+
+app.post("/api/planned-operations", async (c) => {
+  const user = await authUser(c);
+  return c.json(await createPlannedOperation(c.env, user.id, await c.req.json()), 201);
+});
+
+app.post("/api/planned-operations/series", async (c) => {
+  const user = await authUser(c);
+  return c.json(await createPlannedOperationSeries(c.env, user.id, await c.req.json()), 201);
+});
+
+app.patch("/api/planned-operations/:id/mark-done", async (c) => {
+  const user = await authUser(c);
+  const body = markDoneSchema.parse(await c.req.json().catch(() => ({})));
+  return c.json(await markPlannedOperationDone(c.env, user.id, c.req.param("id"), body.actualDate));
+});
+
+app.delete("/api/planned-operations/:id", async (c) => {
+  const user = await authUser(c);
+  return c.json(await deletePlannedOperation(c.env, user.id, c.req.param("id")));
 });
 
 app.patch("/api/settings/start-balance", async (c) => {

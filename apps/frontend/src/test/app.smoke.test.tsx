@@ -9,6 +9,14 @@ describe("App", () => {
     expect(screen.getAllByText("Графики").length).toBeGreaterThan(0);
   });
 
+  it("uses a finance toolbar instead of duplicated Telegram chrome", () => {
+    render(<App />);
+
+    expect(screen.queryByText("Закрыть")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Выбрать период")).toHaveTextContent("Май 2026");
+    expect(screen.getByLabelText("Быстро добавить")).toBeInTheDocument();
+  });
+
   it("connects primary wallet actions to real screens", () => {
     render(<App />);
 

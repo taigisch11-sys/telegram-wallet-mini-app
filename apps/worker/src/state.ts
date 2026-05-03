@@ -1,5 +1,5 @@
-import { IncomeStatus, PaymentStatus, type DashboardStateDto, type HistoryItemDto, type TimeseriesPointDto } from "@wallet/shared";
-import { accountInputSchema, debtInputSchema, incomeInputSchema, paymentInputSchema, reconcileSchema } from "@wallet/shared";
+import { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus, generateMonthlySchedule, type DashboardStateDto, type HistoryItemDto, type TimeseriesPointDto } from "@wallet/shared";
+import { accountInputSchema, debtInputSchema, incomeInputSchema, paymentInputSchema, plannedOperationInputSchema, plannedOperationSeriesInputSchema, reconcileSchema } from "@wallet/shared";
 import { id, sql } from "./db";
 import type { WorkerEnv } from "./env";
 import { currentMonth, effectiveDate, normalizeDebtAmount, toMoney, toNumber } from "./money";
@@ -16,6 +16,33 @@ type AccountRow = { id: string; name: string; balance: string; createdAt: string
 type DebtRow = { id: string; name: string; amount: string; createdAt: string | Date };
 type SettingsRow = { currentMonth: string; startBalance: string; editedBalance: string | null };
 type SnapshotRow = { id: string; accountBalance: string; debtBalance: string; netBalance: string; createdAt: string | Date };
+type OperationRow = {
+  id: string;
+  kind: string;
+  name: string;
+  amount: string;
+  operationDate: string | Date;
+  note: string | null;
+  plannedOperationId: string | null;
+  seriesId: string | null;
+  createdAt: string | Date;
+};
+type OperationEntryRow = { id: string; operationId: string; targetType: string; targetId: string; amount: string };
+type PlannedOperationRow = {
+  id: string;
+  kind: string;
+  name: string;
+  amount: string;
+  plannedDate: string | Date;
+  expectedDate: string | Date | null;
+  actualDate: string | Date | null;
+  status: string;
+  note: string | null;
+  sourceAccountId: string | null;
+  targetAccountId: string | null;
+  targetDebtId: string | null;
+  seriesId: string | null;
+};
 type PlanRow = {
   id: string;
   name: string;
@@ -89,12 +116,54 @@ function mapSnapshot(row: SnapshotRow | undefined) {
   };
 }
 
+function mapOperation(row: OperationRow, entries: OperationEntryRow[]) {
+  return {
+    id: row.id,
+    kind: row.kind as OperationKind,
+    name: row.name,
+    amount: toMoney(row.amount),
+    operationDate: iso(row.operationDate)!,
+    note: row.note,
+    plannedOperationId: row.plannedOperationId,
+    seriesId: row.seriesId,
+    createdAt: iso(row.createdAt)!,
+    entries: entries
+      .filter((entry) => entry.operationId === row.id)
+      .map((entry) => ({
+        id: entry.id,
+        targetType: entry.targetType as "account" | "debt",
+        targetId: entry.targetId,
+        amount: toMoney(entry.amount)
+      }))
+  };
+}
+
+function mapPlannedOperation(row: PlannedOperationRow) {
+  return {
+    id: row.id,
+    kind: row.kind as OperationKind,
+    name: row.name,
+    amount: toMoney(row.amount),
+    plannedDate: iso(row.plannedDate)!,
+    expectedDate: iso(row.expectedDate),
+    actualDate: iso(row.actualDate),
+    effectiveDate: effectiveDate(row).toISOString(),
+    status: row.status as PlannedOperationStatus,
+    note: row.note,
+    sourceAccountId: row.sourceAccountId,
+    targetAccountId: row.targetAccountId,
+    targetDebtId: row.targetDebtId,
+    seriesId: row.seriesId
+  };
+}
+
 function calculateBalances(input: {
   settings: SettingsRow;
   accounts: AccountRow[];
   debts: DebtRow[];
   income: PlanRow[];
   payments: PlanRow[];
+  plannedOperations: PlannedOperationRow[];
 }) {
   const accountBalance = input.accounts.reduce((sum, item) => sum + toNumber(item.balance), 0);
   const debtBalance = input.debts.reduce((sum, item) => sum + toNumber(item.amount), 0);
@@ -107,6 +176,9 @@ function calculateBalances(input: {
   const requiredUpcomingPayments = input.payments
     .filter((item) => item.status === PaymentStatus.planned || item.status === PaymentStatus.overdue)
     .reduce((sum, item) => sum + toNumber(item.amount), 0);
+  const requiredUpcomingOperations = input.plannedOperations
+    .filter((item) => (item.status === PlannedOperationStatus.planned || item.status === PlannedOperationStatus.overdue) && (item.kind === OperationKind.expense || item.kind === OperationKind.debt_repayment))
+    .reduce((sum, item) => sum + toNumber(item.amount), 0);
   const calculatedBalance = toNumber(input.settings.startBalance) + receivedIncome - paidPayments;
   const currentBalance = input.settings.editedBalance === null ? calculatedBalance : toNumber(input.settings.editedBalance);
 
@@ -117,18 +189,21 @@ function calculateBalances(input: {
     calculatedBalance,
     currentBalance,
     additionalExpenses: input.settings.editedBalance === null ? 0 : currentBalance - calculatedBalance,
-    freeMoney: currentBalance - requiredUpcomingPayments
+    freeMoney: currentBalance - requiredUpcomingPayments - requiredUpcomingOperations
   };
 }
 
 export async function dashboardState(env: WorkerEnv, userId: string): Promise<DashboardStateDto> {
   const db = sql(env);
-  const [users, accounts, debts, income, payments, settingsRows, snapshots] = await Promise.all([
+  const [users, accounts, debts, income, payments, operations, operationEntries, plannedOperations, settingsRows, snapshots] = await Promise.all([
     db`SELECT id, "telegramId", username, "firstName", "createdAt" FROM "User" WHERE id = ${userId} LIMIT 1`,
     db`SELECT id, name, balance, "createdAt" FROM "Account" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
     db`SELECT id, name, amount, "createdAt" FROM "Debt" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
     db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note FROM "Income" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
     db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note FROM "Payment" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
+    db`SELECT id, kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt" FROM "Operation" WHERE "userId" = ${userId} ORDER BY "operationDate" DESC LIMIT 100`,
+    db`SELECT id, "operationId", "targetType", "targetId", amount FROM "OperationEntry" WHERE "operationId" IN (SELECT id FROM "Operation" WHERE "userId" = ${userId} ORDER BY "operationDate" DESC LIMIT 100)`,
+    db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
     db`SELECT "currentMonth", "startBalance", "editedBalance" FROM "Settings" WHERE "userId" = ${userId} LIMIT 1`,
     db`SELECT id, "accountBalance", "debtBalance", "netBalance", "createdAt" FROM "BalanceSnapshot" WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT 1`
   ]);
@@ -140,7 +215,8 @@ export async function dashboardState(env: WorkerEnv, userId: string): Promise<Da
     accounts: accounts as AccountRow[],
     debts: debts as DebtRow[],
     income: income as PlanRow[],
-    payments: payments as PlanRow[]
+    payments: payments as PlanRow[],
+    plannedOperations: plannedOperations as PlannedOperationRow[]
   });
 
   const alerts = [];
@@ -160,7 +236,10 @@ export async function dashboardState(env: WorkerEnv, userId: string): Promise<Da
       .map((item) => ({ id: item.id, kind: "income" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status as IncomeStatus })),
     ...(payments as PlanRow[])
       .filter((item) => item.status === PaymentStatus.planned || item.status === PaymentStatus.overdue)
-      .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status as PaymentStatus }))
+      .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status as PaymentStatus })),
+    ...(plannedOperations as PlannedOperationRow[])
+      .filter((item) => item.status === PlannedOperationStatus.planned || item.status === PlannedOperationStatus.overdue)
+      .map((item) => ({ id: item.id, kind: item.kind as OperationKind, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status as PlannedOperationStatus }))
   ]
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 8);
@@ -173,7 +252,7 @@ export async function dashboardState(env: WorkerEnv, userId: string): Promise<Da
   }
 
   const counts: Record<string, number> = {};
-  for (const item of [...(income as PlanRow[]), ...(payments as PlanRow[])]) {
+  for (const item of [...(income as PlanRow[]), ...(payments as PlanRow[]), ...(plannedOperations as PlannedOperationRow[])]) {
     counts[item.status] = (counts[item.status] ?? 0) + 1;
   }
 
@@ -199,6 +278,8 @@ export async function dashboardState(env: WorkerEnv, userId: string): Promise<Da
     debts: (debts as DebtRow[]).map(mapDebt),
     income: (income as PlanRow[]).map(mapIncome),
     payments: (payments as PlanRow[]).map(mapPayment),
+    operations: (operations as OperationRow[]).map((row) => mapOperation(row, operationEntries as OperationEntryRow[])),
+    plannedOperations: (plannedOperations as PlannedOperationRow[]).map(mapPlannedOperation),
     latestSnapshot: mapSnapshot(snapshots[0] as SnapshotRow | undefined),
     counts
   };
@@ -278,6 +359,84 @@ export async function timeseries(env: WorkerEnv, userId: string): Promise<Timese
     netBalance: toNumber(row.netBalance),
     additionalExpenses: 0
   }));
+}
+
+export async function createPlannedOperation(env: WorkerEnv, userId: string, body: unknown) {
+  const input = plannedOperationInputSchema.parse(body);
+  const rows = await sql(env)`
+    INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "createdAt")
+    VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${input.seriesId ?? null}, NOW())
+    RETURNING id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId"
+  `;
+  return mapPlannedOperation(rows[0] as PlannedOperationRow);
+}
+
+export async function createPlannedOperationSeries(env: WorkerEnv, userId: string, body: unknown) {
+  const input = plannedOperationSeriesInputSchema.parse(body);
+  const seriesId = id();
+  const db = sql(env);
+  await db`
+    INSERT INTO "OperationSeries" (id, "userId", name, kind, "defaultAmount", "finalAmount", "startDate", count, "sourceAccountId", "targetAccountId", "targetDebtId", "createdAt")
+    VALUES (${seriesId}, ${userId}, ${input.name}, ${input.kind}::"OperationKind", ${input.amount}, ${input.finalAmount ?? null}, ${new Date(input.startDate).toISOString()}, ${input.count}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, NOW())
+  `;
+
+  for (const item of generateMonthlySchedule({ startDate: input.startDate, count: input.count, amount: input.amount, finalAmount: input.finalAmount })) {
+    await db`
+      INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "createdAt")
+      VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${item.amount}, ${new Date(item.plannedDate).toISOString()}, 'planned'::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${seriesId}, NOW())
+    `;
+  }
+
+  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE "seriesId" = ${seriesId} ORDER BY "plannedDate" ASC`;
+  return rows.map((row: any) => mapPlannedOperation(row as PlannedOperationRow));
+}
+
+export async function markPlannedOperationDone(env: WorkerEnv, userId: string, operationId: string, actualDateInput?: string) {
+  const db = sql(env);
+  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE id = ${operationId} AND "userId" = ${userId} LIMIT 1`;
+  const planned = rows[0] as PlannedOperationRow | undefined;
+  if (!planned) throw new Error("Planned operation not found");
+
+  const actualDate = actualDateInput ? new Date(actualDateInput).toISOString() : new Date().toISOString();
+  const createdOperationId = id();
+  const amount = toNumber(planned.amount);
+  await db`
+    INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt")
+    VALUES (${createdOperationId}, ${userId}, ${planned.kind}::"OperationKind", ${planned.name}, ${planned.amount}, ${actualDate}, ${planned.note}, ${planned.id}, ${planned.seriesId}, NOW())
+  `;
+
+  const entries: { targetType: "account" | "debt"; targetId: string; amount: string }[] = [];
+  if ((planned.kind === OperationKind.expense || planned.kind === OperationKind.debt_repayment || planned.kind === OperationKind.transfer) && planned.sourceAccountId) {
+    entries.push({ targetType: "account", targetId: planned.sourceAccountId, amount: (-amount).toFixed(2) });
+  }
+  if ((planned.kind === OperationKind.income || planned.kind === OperationKind.transfer) && planned.targetAccountId) {
+    entries.push({ targetType: "account", targetId: planned.targetAccountId, amount: amount.toFixed(2) });
+  }
+  if (planned.kind === OperationKind.debt_repayment && planned.targetDebtId) {
+    entries.push({ targetType: "debt", targetId: planned.targetDebtId, amount: amount.toFixed(2) });
+  }
+
+  for (const entry of entries) {
+    await db`INSERT INTO "OperationEntry" (id, "operationId", "targetType", "targetId", amount, "createdAt") VALUES (${id()}, ${createdOperationId}, ${entry.targetType}, ${entry.targetId}, ${entry.amount}, NOW())`;
+    if (entry.targetType === "account") {
+      await db`UPDATE "Account" SET balance = balance + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId}`;
+    } else {
+      await db`UPDATE "Debt" SET amount = amount + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId}`;
+    }
+  }
+
+  const updatedRows = await db`
+    UPDATE "PlannedOperation"
+    SET status = 'done'::"PlannedOperationStatus", "actualDate" = ${actualDate}
+    WHERE id = ${planned.id} AND "userId" = ${userId}
+    RETURNING id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId"
+  `;
+  return mapPlannedOperation(updatedRows[0] as PlannedOperationRow);
+}
+
+export async function deletePlannedOperation(env: WorkerEnv, userId: string, plannedOperationId: string) {
+  await sql(env)`DELETE FROM "PlannedOperation" WHERE id = ${plannedOperationId} AND "userId" = ${userId}`;
+  return { ok: true };
 }
 
 function dateOrNull(value: string | null | undefined) {

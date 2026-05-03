@@ -1,7 +1,7 @@
-import { BarChart3, CreditCard, Home, ListChecks, MoreHorizontal, ShieldCheck } from "lucide-react";
+import { BarChart3, ChevronDown, CreditCard, Home, ListChecks, MoreHorizontal, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Screen } from "../../app/App";
-import { closeTelegramApp, isTelegramWebApp } from "../../lib/telegram";
+import { isTelegramWebApp } from "../../lib/telegram";
 
 const items: { id: Screen; label: string; icon: typeof Home }[] = [
   { id: "wallet", label: "Финансы", icon: Home },
@@ -13,33 +13,29 @@ const items: { id: Screen; label: string; icon: typeof Home }[] = [
 
 export function Shell({ active, onNavigate, children }: { active: Screen; onNavigate: (screen: Screen) => void; children: ReactNode }) {
   const inTelegram = isTelegramWebApp();
+  const periodLabel = currentPeriodLabel();
 
   return (
     <main className={`wallet-shell ${inTelegram ? "wallet-shell--telegram pt-4" : "max-w-md pt-7"} mx-auto flex min-h-screen w-full flex-col px-5 pb-28 text-slate-50`}>
-      {!inTelegram ? (
-        <header className="relative mb-5 grid min-h-[68px] grid-cols-[72px_1fr_72px] items-start">
-          <button className="pt-2 text-left text-[17px] font-medium text-[#55a7ff]" type="button" onClick={closeTelegramApp}>
-            Закрыть
-          </button>
-          <div className="text-center">
-            <div className="flex items-center justify-center gap-1.5">
-              <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">Финансы</h1>
-              <ShieldCheck className="fill-[#2f8cff] text-[#2f8cff]" size={21} />
-            </div>
-            <p className="text-[13px] font-semibold text-[#8f8f95]">мини-приложение</p>
-          </div>
-          <div className="flex justify-end pt-1">
-            <button
-              className="grid h-9 w-9 place-items-center rounded-full border border-[#2f8cff]/70 text-[#58a6ff]"
-              type="button"
-              aria-label="Открыть меню"
-              onClick={() => onNavigate("menu")}
-            >
-              <MoreHorizontal size={23} />
-            </button>
-          </div>
-        </header>
-      ) : null}
+      <header className="mb-5 flex min-h-[46px] items-center justify-between gap-3">
+        <button
+          className="inline-flex items-center gap-1 rounded-full bg-[#2b2b30] px-4 py-2 text-[15px] font-extrabold text-white shadow-inner shadow-white/5"
+          type="button"
+          aria-label="Выбрать период"
+          onClick={() => onNavigate("charts")}
+        >
+          {periodLabel}
+          <ChevronDown className="text-[#8f8f95]" size={17} strokeWidth={2.8} />
+        </button>
+        <button
+          className="grid h-11 w-11 place-items-center rounded-full bg-[#2f8cff] text-white shadow-[0_12px_28px_rgba(47,140,255,0.32)]"
+          type="button"
+          aria-label="Быстро добавить"
+          onClick={() => onNavigate("plan")}
+        >
+          <Plus size={24} strokeWidth={3} />
+        </button>
+      </header>
 
       <div className="flex-1">{children}</div>
 
@@ -67,4 +63,9 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
       </nav>
     </main>
   );
+}
+
+function currentPeriodLabel() {
+  const value = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(new Date());
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }

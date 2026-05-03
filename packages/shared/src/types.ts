@@ -1,4 +1,4 @@
-import type { IncomeStatus, PaymentStatus } from "./enums";
+import type { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "./enums";
 
 export type MoneyString = string;
 
@@ -48,6 +48,43 @@ export type PaymentDto = {
   note: string | null;
 };
 
+export type OperationEntryDto = {
+  id: string;
+  targetType: "account" | "debt";
+  targetId: string;
+  amount: MoneyString;
+};
+
+export type OperationDto = {
+  id: string;
+  kind: OperationKind;
+  name: string;
+  amount: MoneyString;
+  operationDate: string;
+  note: string | null;
+  plannedOperationId: string | null;
+  seriesId: string | null;
+  createdAt: string;
+  entries: OperationEntryDto[];
+};
+
+export type PlannedOperationDto = {
+  id: string;
+  kind: OperationKind;
+  name: string;
+  amount: MoneyString;
+  plannedDate: string;
+  expectedDate: string | null;
+  actualDate: string | null;
+  effectiveDate: string;
+  status: PlannedOperationStatus;
+  note: string | null;
+  sourceAccountId: string | null;
+  targetAccountId: string | null;
+  targetDebtId: string | null;
+  seriesId: string | null;
+};
+
 export type SettingsDto = {
   currentMonth: string;
   startBalance: MoneyString;
@@ -73,11 +110,11 @@ export type AlertDto = {
 
 export type UpcomingEventDto = {
   id: string;
-  kind: "income" | "payment";
+  kind: "income" | "payment" | OperationKind;
   title: string;
   amount: MoneyString;
   date: string;
-  status: IncomeStatus | PaymentStatus;
+  status: IncomeStatus | PaymentStatus | PlannedOperationStatus;
 };
 
 export type SnapshotDto = {
@@ -113,6 +150,8 @@ export type DashboardStateDto = {
   debts: DebtDto[];
   income: IncomeDto[];
   payments: PaymentDto[];
+  operations: OperationDto[];
+  plannedOperations: PlannedOperationDto[];
   latestSnapshot: SnapshotDto | null;
   counts: Record<string, number>;
 };

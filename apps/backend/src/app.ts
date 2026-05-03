@@ -11,7 +11,9 @@ import { authRouter } from "./modules/auth/auth.controller";
 import { debtsRouter } from "./modules/debts/debts.controller";
 import { historyRouter } from "./modules/history/history.controller";
 import { incomeRouter } from "./modules/income/income.controller";
+import { operationsRouter } from "./modules/operations/operations.controller";
 import { paymentsRouter } from "./modules/payments/payments.controller";
+import { plannedOperationsRouter } from "./modules/planned-operations/planned-operations.controller";
 import { settingsRouter } from "./modules/settings/settings.controller";
 import { stateRouter } from "./modules/state/state.controller";
 import { createTelegramWebhookRouter } from "./modules/telegram/telegram-webhook.controller";
@@ -30,6 +32,8 @@ export function createApp(bot: TelegramBot | null = null) {
   app.use("/api/debts", requireAuth, debtsRouter);
   app.use("/api/income", requireAuth, incomeRouter);
   app.use("/api/payments", requireAuth, paymentsRouter);
+  app.use("/api/operations", requireAuth, operationsRouter);
+  app.use("/api/planned-operations", requireAuth, plannedOperationsRouter);
   app.use("/api/settings", requireAuth, settingsRouter);
   app.use("/api/history", requireAuth, historyRouter);
   app.use("/api/analytics", requireAuth, analyticsRouter);

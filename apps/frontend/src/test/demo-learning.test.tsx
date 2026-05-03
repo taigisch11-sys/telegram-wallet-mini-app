@@ -6,7 +6,7 @@ describe("Demo and learning modes", () => {
   it("opens the menu with demo, learning, history, and the user checklist", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Открыть меню"));
+    fireEvent.click(screen.getByLabelText("Меню"));
 
     expect(screen.getByRole("heading", { name: "Меню" })).toBeInTheDocument();
     expect(screen.getByText("Демо-режим")).toBeInTheDocument();
@@ -20,7 +20,7 @@ describe("Demo and learning modes", () => {
   it("starts a visual demo with realistic sample finance data", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Открыть меню"));
+    fireEvent.click(screen.getByLabelText("Меню"));
     fireEvent.click(screen.getByText("Включить демо"));
 
     expect(screen.getByText("Демо-режим")).toBeInTheDocument();
@@ -31,7 +31,7 @@ describe("Demo and learning modes", () => {
   it("starts learning mode and guides the user to the next task", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Открыть меню"));
+    fireEvent.click(screen.getByLabelText("Меню"));
     fireEvent.click(screen.getByText("Включить обучение"));
 
     expect(screen.getByText("Обучение включено")).toBeInTheDocument();

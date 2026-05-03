@@ -35,6 +35,8 @@ export const emptyState: DashboardStateDto = {
   debts: [],
   income: [],
   payments: [],
+  operations: [],
+  plannedOperations: [],
   latestSnapshot: null,
   counts: {}
 };

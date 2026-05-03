@@ -1,4 +1,4 @@
-import { IncomeStatus } from "@wallet/shared";
+import { IncomeStatus, OperationKind } from "@wallet/shared";
 import { notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { mapIncome } from "../finance/finance-mappers";
@@ -48,8 +48,21 @@ export async function markIncomeReceived(userId: string, id: string, actualDateI
   const actualDate = actualDateInput ? new Date(actualDateInput) : new Date();
   const effective = existing.expectedDate ?? existing.plannedDate;
   const status = resolveIncomeReceivedStatus(effective, actualDate);
-  const income = await prisma.income.update({ where: { id }, data: { actualDate, status } });
-  await prisma.history.create({ data: { userId, type: "income_received", payload: { id, name: income.name, amount: String(income.amount), status } } });
+  const income = await prisma.$transaction(async (tx) => {
+    const updated = await tx.income.update({ where: { id }, data: { actualDate, status } });
+    await tx.operation.create({
+      data: {
+        userId,
+        kind: OperationKind.income,
+        name: updated.name,
+        amount: updated.amount,
+        operationDate: actualDate,
+        note: "Доход получен"
+      }
+    });
+    await tx.history.create({ data: { userId, type: "income_received", payload: { id, name: updated.name, amount: String(updated.amount), status } } });
+    return updated;
+  });
   return mapIncome(income);
 }
 

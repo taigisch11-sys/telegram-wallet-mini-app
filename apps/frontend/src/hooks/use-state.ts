@@ -6,11 +6,20 @@ import { emptyState } from "../mock/state";
 
 const LOCAL_STATE_KEY = "wallet_local_state";
 
+export function normalizeDashboardState(state: DashboardStateDto): DashboardStateDto {
+  const legacy = state as DashboardStateDto & Partial<Pick<DashboardStateDto, "operations" | "plannedOperations">>;
+  return {
+    ...state,
+    operations: legacy.operations ?? [],
+    plannedOperations: legacy.plannedOperations ?? []
+  };
+}
+
 function readLocalState() {
   try {
     const saved = localStorage.getItem(LOCAL_STATE_KEY);
     if (!saved) return emptyState;
-    const parsed = JSON.parse(saved) as DashboardStateDto;
+    const parsed = normalizeDashboardState(JSON.parse(saved) as DashboardStateDto);
     if (parsed.user.id === "demo" || parsed.user.username === "demo_wallet") {
       localStorage.removeItem(LOCAL_STATE_KEY);
       return emptyState;
@@ -40,7 +49,7 @@ export function useWalletState() {
       const hasTelegramSession = await authenticate();
       if (!hasTelegramSession) return;
       const next = await api.state();
-      setData(next);
+      setData(normalizeDashboardState(next));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось обновить данные");
     } finally {

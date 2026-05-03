@@ -1,16 +1,18 @@
-import { IncomeStatus, PaymentStatus } from "@wallet/shared";
+import { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "@wallet/shared";
 import { prisma } from "../../lib/prisma";
 import { calculateDashboardBalances, debtLoad } from "../finance/finance-calculations";
-import { mapAccount, mapDebt, mapIncome, mapPayment, mapSettings, mapSnapshot, mapUser } from "../finance/finance-mappers";
+import { mapAccount, mapDebt, mapIncome, mapOperation, mapPayment, mapPlannedOperation, mapSettings, mapSnapshot, mapUser } from "../finance/finance-mappers";
 import { effectiveDate, toMoney, toNumber } from "../finance/finance-utils";
 
 export async function getDashboardState(userId: string) {
-  const [user, accounts, debts, income, payments, settings, latestSnapshot] = await Promise.all([
+  const [user, accounts, debts, income, payments, operations, plannedOperations, settings, latestSnapshot] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userId } }),
     prisma.account.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.debt.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.income.findMany({ where: { userId }, orderBy: { plannedDate: "asc" } }),
     prisma.payment.findMany({ where: { userId }, orderBy: { plannedDate: "asc" } }),
+    prisma.operation.findMany({ where: { userId }, include: { entries: true }, orderBy: { operationDate: "desc" }, take: 100 }),
+    prisma.plannedOperation.findMany({ where: { userId }, orderBy: { plannedDate: "asc" } }),
     prisma.settings.findUniqueOrThrow({ where: { userId } }),
     prisma.balanceSnapshot.findFirst({ where: { userId }, orderBy: { createdAt: "desc" } })
   ]);
@@ -20,6 +22,13 @@ export async function getDashboardState(userId: string) {
   const requiredUpcomingPayments = payments
     .filter((payment) => payment.status === PaymentStatus.planned || payment.status === PaymentStatus.overdue)
     .reduce((sum, payment) => sum + toNumber(payment.amount), 0);
+  const requiredUpcomingOperations = plannedOperations
+    .filter(
+      (operation) =>
+        (operation.status === PlannedOperationStatus.planned || operation.status === PlannedOperationStatus.overdue) &&
+        (operation.kind === OperationKind.expense || operation.kind === OperationKind.debt_repayment)
+    )
+    .reduce((sum, operation) => sum + toNumber(operation.amount), 0);
 
   const rawBalances = calculateDashboardBalances({
     startBalance: toNumber(settings.startBalance),
@@ -28,7 +37,7 @@ export async function getDashboardState(userId: string) {
     debtBalance,
     incomes: income.map((item) => ({ amount: toNumber(item.amount), status: item.status })),
     payments: payments.map((item) => ({ amount: toNumber(item.amount), status: item.status })),
-    requiredUpcomingPayments
+    requiredUpcomingPayments: requiredUpcomingPayments + requiredUpcomingOperations
   });
 
   const now = new Date();
@@ -58,13 +67,16 @@ export async function getDashboardState(userId: string) {
       .map((item) => ({ id: item.id, kind: "income" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status })),
     ...payments
       .filter((item) => item.status === PaymentStatus.planned || item.status === PaymentStatus.overdue)
-      .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status }))
+      .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: toMoney(item.amount), date: effectiveDate(item).toISOString(), status: item.status })),
+    ...plannedOperations
+      .filter((item) => item.status === PlannedOperationStatus.planned || item.status === PlannedOperationStatus.overdue)
+      .map((item) => ({ id: item.id, kind: item.kind, title: item.name, amount: toMoney(item.amount), date: (item.expectedDate ?? item.plannedDate).toISOString(), status: item.status }))
   ]
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 8);
 
   const counts: Record<string, number> = {};
-  for (const item of [...income, ...payments]) {
+  for (const item of [...income, ...payments, ...plannedOperations]) {
     counts[item.status] = (counts[item.status] ?? 0) + 1;
   }
 
@@ -86,6 +98,8 @@ export async function getDashboardState(userId: string) {
     debts: debts.map(mapDebt),
     income: income.map(mapIncome),
     payments: payments.map(mapPayment),
+    operations: operations.map(mapOperation),
+    plannedOperations: plannedOperations.map(mapPlannedOperation),
     latestSnapshot: mapSnapshot(latestSnapshot),
     counts
   };

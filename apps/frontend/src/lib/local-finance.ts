@@ -1,4 +1,4 @@
-import type { DashboardStateDto, IncomeStatus, PaymentStatus } from "@wallet/shared";
+import type { DashboardStateDto, IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "@wallet/shared";
 
 const incomeStatus = {
   planned: "planned",
@@ -17,6 +17,23 @@ const paymentStatus = {
   cancelled: "cancelled"
 } as const satisfies Record<PaymentStatus, PaymentStatus>;
 
+const plannedOperationStatus = {
+  planned: "planned",
+  overdue: "overdue",
+  done: "done",
+  skipped: "skipped",
+  cancelled: "cancelled"
+} as const satisfies Record<PlannedOperationStatus, PlannedOperationStatus>;
+
+const operationKind = {
+  income: "income",
+  expense: "expense",
+  transfer: "transfer",
+  debt_repayment: "debt_repayment",
+  adjustment: "adjustment",
+  unallocated: "unallocated"
+} as const satisfies Record<OperationKind, OperationKind>;
+
 export function recalculateLocalState(state: DashboardStateDto): DashboardStateDto {
   const accountBalance = state.accounts.reduce((sum, account) => sum + Number(account.balance), 0);
   const debtBalance = state.debts.reduce((sum, debt) => sum + Number(debt.amount), 0);
@@ -29,11 +46,14 @@ export function recalculateLocalState(state: DashboardStateDto): DashboardStateD
   const requiredUpcomingPayments = state.payments
     .filter((item) => item.status === paymentStatus.planned || item.status === paymentStatus.overdue)
     .reduce((sum, item) => sum + Number(item.amount), 0);
+  const requiredUpcomingOperations = state.plannedOperations
+    .filter((item) => (item.status === plannedOperationStatus.planned || item.status === plannedOperationStatus.overdue) && (item.kind === operationKind.expense || item.kind === operationKind.debt_repayment))
+    .reduce((sum, item) => sum + Number(item.amount), 0);
   const startBalance = Number(state.settings.startBalance);
   const calculatedBalance = startBalance + receivedIncome - paidPayments;
   const editedBalance = state.settings.editedBalance === null ? null : Number(state.settings.editedBalance);
   const currentBalance = editedBalance ?? calculatedBalance;
-  const alerts = buildAlerts(state, currentBalance - requiredUpcomingPayments, accountBalance, debtBalance);
+  const alerts = buildAlerts(state, currentBalance - requiredUpcomingPayments - requiredUpcomingOperations, accountBalance, debtBalance);
 
   return {
     ...state,
@@ -44,7 +64,7 @@ export function recalculateLocalState(state: DashboardStateDto): DashboardStateD
       calculatedBalance: calculatedBalance.toFixed(2),
       currentBalance: currentBalance.toFixed(2),
       additionalExpenses: (editedBalance === null ? 0 : editedBalance - calculatedBalance).toFixed(2),
-      freeMoney: (currentBalance - requiredUpcomingPayments).toFixed(2)
+      freeMoney: (currentBalance - requiredUpcomingPayments - requiredUpcomingOperations).toFixed(2)
     },
     alerts,
     upcoming: [
@@ -53,11 +73,14 @@ export function recalculateLocalState(state: DashboardStateDto): DashboardStateD
         .map((item) => ({ id: item.id, kind: "income" as const, title: item.name, amount: item.amount, date: item.effectiveDate, status: item.status })),
       ...state.payments
         .filter((item) => item.status === paymentStatus.planned || item.status === paymentStatus.overdue)
-        .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: item.amount, date: item.effectiveDate, status: item.status }))
+        .map((item) => ({ id: item.id, kind: "payment" as const, title: item.name, amount: item.amount, date: item.effectiveDate, status: item.status })),
+      ...state.plannedOperations
+        .filter((item) => item.status === plannedOperationStatus.planned || item.status === plannedOperationStatus.overdue)
+        .map((item) => ({ id: item.id, kind: item.kind, title: item.name, amount: item.amount, date: item.effectiveDate, status: item.status }))
     ]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(0, 8),
-    counts: [...state.income, ...state.payments].reduce<Record<string, number>>((acc, item) => {
+    counts: [...state.income, ...state.payments, ...state.plannedOperations].reduce<Record<string, number>>((acc, item) => {
       acc[item.status] = (acc[item.status] ?? 0) + 1;
       return acc;
     }, {})

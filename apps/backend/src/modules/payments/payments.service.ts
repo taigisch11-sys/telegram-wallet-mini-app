@@ -1,4 +1,4 @@
-import { PaymentStatus } from "@wallet/shared";
+import { OperationKind, PaymentStatus } from "@wallet/shared";
 import { notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { mapPayment } from "../finance/finance-mappers";
@@ -48,8 +48,21 @@ export async function markPaymentPaid(userId: string, id: string, actualDateInpu
   const actualDate = actualDateInput ? new Date(actualDateInput) : new Date();
   const effective = existing.expectedDate ?? existing.plannedDate;
   const status = resolvePaymentPaidStatus(effective, actualDate);
-  const payment = await prisma.payment.update({ where: { id }, data: { actualDate, status } });
-  await prisma.history.create({ data: { userId, type: "payment_paid", payload: { id, name: payment.name, amount: String(payment.amount), status } } });
+  const payment = await prisma.$transaction(async (tx) => {
+    const updated = await tx.payment.update({ where: { id }, data: { actualDate, status } });
+    await tx.operation.create({
+      data: {
+        userId,
+        kind: OperationKind.expense,
+        name: updated.name,
+        amount: updated.amount,
+        operationDate: actualDate,
+        note: "Платёж исполнен"
+      }
+    });
+    await tx.history.create({ data: { userId, type: "payment_paid", payload: { id, name: updated.name, amount: String(updated.amount), status } } });
+    return updated;
+  });
   return mapPayment(payment);
 }
 
