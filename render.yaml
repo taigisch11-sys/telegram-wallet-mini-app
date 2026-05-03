@@ -2,16 +2,12 @@ services:
   - type: web
     name: telegram-wallet-frontend
     runtime: static
-    buildCommand: npm install && npm run build --workspace apps/frontend
+    buildCommand: npm ci && npm run build --workspace @wallet/frontend
     staticPublishPath: apps/frontend/dist
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: ALLOWALL
     envVars:
       - key: VITE_API_URL
         value: https://telegram-wallet-backend.onrender.com
