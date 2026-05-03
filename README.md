@@ -1,6 +1,6 @@
-# Telegram Mini App "Кошелёк"
+# Telegram Mini App "Кошелек"
 
-Балансовый учёт финансов в формате Telegram Mini App. Пользователь не вводит каждую трату, а периодически сверяет реальные остатки по счетам и долгам, отмечает доходы и обязательные платежи, а приложение показывает текущий баланс, прогноз, просрочки и нераспределённые расходы.
+Балансовый учет финансов в формате Telegram Mini App. Пользователь не вводит каждую трату, а периодически сверяет реальные остатки по счетам и долгам, отмечает доходы и обязательные платежи. Приложение рассчитывает баланс, свободные деньги, просрочки, риски и нераспределенные расходы.
 
 ## Стек
 
@@ -12,65 +12,101 @@
 
 ## Структура
 
-- `apps/frontend` — интерфейс Telegram Mini App
-- `apps/backend` — API, бизнес-логика и Telegram bot runtime
-- `packages/shared` — общие DTO, enum и схемы валидации
-- `prisma` — схема БД и seed
-- `.env.example` — локальный шаблон окружения
-- `.env.production.example` — production-шаблон окружения
+- `apps/frontend` - интерфейс Telegram Mini App
+- `apps/backend` - API, бизнес-логика и Telegram bot runtime
+- `packages/shared` - общие DTO, enum и схемы
+- `prisma` - схема БД, миграции и seed
+- `docker-compose.local.yml` - локальный PostgreSQL на этом ПК
+
+## Локальное хранилище на этом ПК
+
+Данные можно временно хранить прямо на этом компьютере в PostgreSQL внутри Docker. Данные сохраняются в Docker volume `telegram-wallet-postgres-data` и не пропадают при остановке контейнера.
+
+```powershell
+npm run local:db:start
+```
+
+Подключение:
+
+```dotenv
+DATABASE_URL=postgresql://wallet:wallet_local_password@localhost:5432/telegram_wallet
+```
+
+Остановить базу без удаления данных:
+
+```powershell
+npm run local:db:stop
+```
+
+Удалить локальные данные полностью:
+
+```powershell
+npm run local:db:reset
+```
 
 ## Локальный запуск
 
-```bash
+```powershell
 npm install
 npm run prisma:generate
-npm run prisma:migrate
+npm run local:db:start
+```
+
+Backend с локальной БД:
+
+```powershell
+$env:DATABASE_URL="postgresql://wallet:wallet_local_password@localhost:5432/telegram_wallet"
+$env:BOT_MODE="polling"
+$env:DEV_AUTH_BYPASS="true"
 npm run dev:backend
+```
+
+Frontend:
+
+```powershell
 npm run dev:frontend
 ```
 
-Локальные адреса:
+Адреса:
 
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:4000`
 - Healthcheck: `http://localhost:4000/health`
 
-## База данных
+## Временная бесплатная публикация
 
-Для локальной разработки нужен PostgreSQL и `DATABASE_URL` в `.env`.
+Для тестирования Telegram Mini App без платных тарифов можно использовать:
 
-Команды:
+- локальный backend и frontend на этом ПК;
+- локальный PostgreSQL в Docker;
+- бесплатный HTTPS-туннель, например Cloudflare Tunnel.
 
-```bash
-npm run prisma:migrate
-npm run prisma:deploy
-npm run prisma:seed
+Схема:
+
+```text
+Telegram -> HTTPS tunnel -> this PC -> frontend/backend -> local PostgreSQL
 ```
 
-Для production используется `npm run prisma:deploy`. Seed в production запускать не нужно, если не нужны тестовые данные.
+Важно: это временный вариант. Если ПК выключен, спит или потерял интернет, приложение будет недоступно.
 
-## Telegram
+## Production
 
-Локально:
+Рекомендуемая полноценная схема:
 
-```dotenv
-BOT_MODE=polling
-TELEGRAM_BOT_TOKEN=123456:token
-TELEGRAM_WEBAPP_URL=https://your-public-frontend-url
-DEV_AUTH_BYPASS=true
-```
+- Frontend: Vercel, Netlify, Cloudflare Pages или другой static hosting
+- Backend: Render/Railway/Fly.io/Koyeb или VPS
+- Database: Neon/Supabase/PostgreSQL
 
-Production:
+Для production backend должен работать с:
 
 ```dotenv
 BOT_MODE=webhook
+DEV_AUTH_BYPASS=false
 TELEGRAM_WEBHOOK_URL=https://your-backend-url/api/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=long-random-secret
 TELEGRAM_WEBAPP_URL=https://your-frontend-url
-DEV_AUTH_BYPASS=false
+FRONTEND_ORIGIN=https://your-frontend-url
 ```
-
-При запуске backend в webhook-режиме приложение регистрирует webhook и Menu Button автоматически.
 
 ## API
 
@@ -100,46 +136,9 @@ DEV_AUTH_BYPASS=false
 - `GET /api/history`
 - `GET /api/analytics/timeseries?period=week|month|quarter|year`
 
-## Публикация
-
-Рекомендуемая схема:
-
-- Frontend: Vercel
-- Backend: Render
-- Database: Neon или Supabase PostgreSQL
-
-### Vercel
-
-1. Импортируйте репозиторий.
-2. Используйте корневой `vercel.json`.
-3. Добавьте env:
-   `VITE_API_URL=https://your-backend-url`
-4. После деплоя вставьте Vercel URL в backend env `TELEGRAM_WEBAPP_URL` и `FRONTEND_ORIGIN`.
-
-### Render
-
-1. Подключите репозиторий.
-2. Используйте `render.yaml`.
-3. Добавьте env из `.env.production.example`.
-4. Укажите `DATABASE_URL` от Neon/Supabase.
-5. Backend сам выполнит `prisma migrate deploy` перед стартом.
-
-### Neon или Supabase
-
-1. Создайте PostgreSQL database.
-2. Скопируйте connection string с `sslmode=require`.
-3. Вставьте его в Render env `DATABASE_URL`.
-
 ## Проверка
 
-```bash
+```powershell
 npm run test
 npm run build
 ```
-
-Ожидаемый результат:
-
-- backend tests проходят
-- frontend component tests проходят
-- production build проходит
-

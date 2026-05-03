@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telegram-wallet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telegram_wallet
+      POSTGRES_USER: wallet
+      POSTGRES_PASSWORD: wallet_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - telegram-wallet-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d telegram_wallet"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  telegram-wallet-postgres-data:
