@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: telegram-wallet-backend
+    runtime: docker
+    dockerfilePath: apps/backend/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BOT_MODE
+        value: webhook
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBAPP_URL
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: DEV_AUTH_BYPASS
+        value: "false"

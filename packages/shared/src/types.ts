@@ -1,0 +1,118 @@
+import type { IncomeStatus, PaymentStatus } from "./enums";
+
+export type MoneyString = string;
+
+export type UserDto = {
+  id: string;
+  telegramId: string;
+  username: string | null;
+  firstName: string | null;
+  createdAt: string;
+};
+
+export type AccountDto = {
+  id: string;
+  name: string;
+  balance: MoneyString;
+  createdAt: string;
+};
+
+export type DebtDto = {
+  id: string;
+  name: string;
+  amount: MoneyString;
+  createdAt: string;
+};
+
+export type IncomeDto = {
+  id: string;
+  name: string;
+  amount: MoneyString;
+  plannedDate: string;
+  expectedDate: string | null;
+  actualDate: string | null;
+  effectiveDate: string;
+  status: IncomeStatus;
+  note: string | null;
+};
+
+export type PaymentDto = {
+  id: string;
+  name: string;
+  amount: MoneyString;
+  plannedDate: string;
+  expectedDate: string | null;
+  actualDate: string | null;
+  effectiveDate: string;
+  status: PaymentStatus;
+  note: string | null;
+};
+
+export type SettingsDto = {
+  currentMonth: string;
+  startBalance: MoneyString;
+  editedBalance: MoneyString | null;
+};
+
+export type BalanceSummaryDto = {
+  accountBalance: MoneyString;
+  debtBalance: MoneyString;
+  netBalance: MoneyString;
+  calculatedBalance: MoneyString;
+  currentBalance: MoneyString;
+  additionalExpenses: MoneyString;
+  freeMoney: MoneyString;
+};
+
+export type AlertDto = {
+  id: string;
+  level: "low" | "medium" | "high";
+  title: string;
+  description: string;
+};
+
+export type UpcomingEventDto = {
+  id: string;
+  kind: "income" | "payment";
+  title: string;
+  amount: MoneyString;
+  date: string;
+  status: IncomeStatus | PaymentStatus;
+};
+
+export type SnapshotDto = {
+  id: string;
+  accountBalance: MoneyString;
+  debtBalance: MoneyString;
+  netBalance: MoneyString;
+  createdAt: string;
+};
+
+export type HistoryItemDto = {
+  id: string;
+  type: string;
+  payload: unknown;
+  createdAt: string;
+};
+
+export type TimeseriesPointDto = {
+  date: string;
+  netBalance: number;
+  accountBalance: number;
+  debtBalance: number;
+  additionalExpenses: number;
+};
+
+export type DashboardStateDto = {
+  user: UserDto;
+  settings: SettingsDto;
+  balances: BalanceSummaryDto;
+  alerts: AlertDto[];
+  upcoming: UpcomingEventDto[];
+  accounts: AccountDto[];
+  debts: DebtDto[];
+  income: IncomeDto[];
+  payments: PaymentDto[];
+  latestSnapshot: SnapshotDto | null;
+  counts: Record<string, number>;
+};
