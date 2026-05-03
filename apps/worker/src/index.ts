@@ -269,6 +269,19 @@ async function wasTelegramUpdateProcessed(env: WorkerEnv, updateId: number) {
 }
 
 async function sendTelegramStartMessage(env: WorkerEnv, chatId: number | string) {
+  await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setChatMenuButton`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      menu_button: {
+        type: "web_app",
+        text: "Кошелёк",
+        web_app: { url: env.TELEGRAM_WEBAPP_URL }
+      }
+    })
+  });
+
   const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
