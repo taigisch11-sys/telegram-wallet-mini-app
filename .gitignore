@@ -15,8 +15,11 @@ dist-ssr
 .env.local
 coverage
 .playwright-cli
+output/
 apps/*/dist
 apps/*/coverage
+qa/ai/reports/*
+!qa/ai/reports/.gitkeep
 
 # Editor directories and files
 .vscode/*

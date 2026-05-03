@@ -26,16 +26,34 @@ describe("AccountsScreen", () => {
 
     expect(screen.getByText("Счетов пока нет. Добавьте карту, вклад или наличные.")).toBeInTheDocument();
 
-    fireEvent.change(screen.getAllByPlaceholderText("Название")[0], { target: { value: "Карта" } });
-    fireEvent.change(screen.getAllByDisplayValue("0.00")[0], { target: { value: "1500" } });
-    fireEvent.click(screen.getByLabelText("Добавить счёт"));
+    fireEvent.change(screen.getByLabelText("Название счёта"), { target: { value: "Карта" } });
+    fireEvent.change(screen.getByLabelText("Остаток"), { target: { value: "1500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить счёт" }));
 
     expect(await screen.findByText("Карта")).toBeInTheDocument();
     expect(screen.getByText("1 500 ₽")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Удалить счёт"));
+    fireEvent.click(screen.getByLabelText("Удалить счёт Карта"));
     await waitFor(() => {
       expect(screen.getByText("Счетов пока нет. Добавьте карту, вклад или наличные.")).toBeInTheDocument();
+    });
+  });
+
+  it("lets the user add a debt account with a positive typed amount and delete it", async () => {
+    render(<AccountsHarness />);
+
+    expect(screen.getByText("Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Название долгового счёта"), { target: { value: "Кредитка" } });
+    fireEvent.change(screen.getByLabelText("Сумма долга"), { target: { value: "25000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить долговой счёт" }));
+
+    expect(await screen.findByText("Кредитка")).toBeInTheDocument();
+    expect(screen.getByText("-25 000 ₽")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Удалить долговой счёт Кредитка"));
+    await waitFor(() => {
+      expect(screen.getByText("Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.")).toBeInTheDocument();
     });
   });
 });

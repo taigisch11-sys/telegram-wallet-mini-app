@@ -243,6 +243,15 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
     }
   }
 
+  async function deleteDebtRepayment(id: string) {
+    try {
+      await api.deletePlannedOperation(id);
+      await wallet.refresh();
+    } catch {
+      wallet.setData((current) => recalculateLocalState({ ...current, plannedOperations: current.plannedOperations.filter((item) => item.id !== id) }));
+    }
+  }
+
   return (
     <div className="space-y-3">
       <Card>
@@ -252,6 +261,8 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           amount={incomeAmount}
           date={incomeDate}
           actionLabel="Добавить доход"
+          nameLabel="Название дохода"
+          amountLabel="Сумма дохода"
           onName={setIncomeName}
           onAmount={setIncomeAmount}
           onDate={setIncomeDate}
@@ -272,6 +283,8 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           amount={paymentAmount}
           date={paymentDate}
           actionLabel="Добавить платёж"
+          nameLabel="Название платежа"
+          amountLabel="Сумма платежа"
           onName={setPaymentName}
           onAmount={setPaymentAmount}
           onDate={setPaymentDate}
@@ -351,7 +364,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           {wallet.data.plannedOperations
             .filter((item) => item.kind === "debt_repayment")
             .map((item) => (
-              <DebtRepaymentRow key={item.id} item={item} onDone={() => void markDebtRepayment(item)} />
+              <DebtRepaymentRow key={item.id} item={item} onDelete={() => void deleteDebtRepayment(item.id)} onDone={() => void markDebtRepayment(item)} />
             ))}
         </div>
       </Card>
@@ -364,6 +377,8 @@ function PlanForm({
   amount,
   date,
   actionLabel,
+  nameLabel,
+  amountLabel,
   onName,
   onAmount,
   onDate,
@@ -373,19 +388,28 @@ function PlanForm({
   amount: string;
   date: string;
   actionLabel: string;
+  nameLabel: string;
+  amountLabel: string;
   onName: (value: string) => void;
   onAmount: (value: string) => void;
   onDate: (value: string) => void;
   onSubmit: () => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_94px_42px] gap-2">
-      <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Название" value={name} onChange={(event) => onName(event.target.value)} />
-      <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right" inputMode="decimal" value={amount} onChange={(event) => onAmount(event.target.value)} />
-      <button className="grid place-items-center rounded-md bg-mint text-ink" type="button" onClick={onSubmit} aria-label={actionLabel}>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_42px]">
+      <label className="block text-xs font-bold text-slate-400">
+        {nameLabel}
+        <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Название" value={name} onChange={(event) => onName(event.target.value)} />
+      </label>
+      <label className="block text-xs font-bold text-slate-400">
+        {amountLabel}
+        <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={amount} onChange={(event) => onAmount(event.target.value)} />
+      </label>
+      <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink sm:mt-5 sm:w-11 sm:px-0" type="button" onClick={onSubmit} aria-label={actionLabel}>
         <Plus size={18} />
+        <span className="sm:hidden">{actionLabel}</span>
       </button>
-      <input className="col-span-3 rounded-md border border-line bg-ink px-3 py-2 text-sm" type="date" value={date} onChange={(event) => onDate(event.target.value)} aria-label={`${actionLabel}: дата`} />
+      <input className="rounded-md border border-line bg-ink px-3 py-2 text-sm sm:col-span-3" type="date" value={date} onChange={(event) => onDate(event.target.value)} aria-label={`${actionLabel}: дата`} />
     </div>
   );
 }
@@ -485,7 +509,7 @@ function DebtBalance({ label, amount, tone }: { label: string; amount: string; t
   );
 }
 
-function DebtRepaymentRow({ item, onDone }: { item: PlannedOperationDto; onDone: () => void }) {
+function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDto; onDelete: () => void; onDone: () => void }) {
   const isDone = item.status === "done";
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
@@ -501,6 +525,11 @@ function DebtRepaymentRow({ item, onDone }: { item: PlannedOperationDto; onDone:
       {!isDone ? (
         <button className="grid h-9 w-9 place-items-center rounded-md bg-mint text-ink" type="button" onClick={onDone} aria-label="Погашение выполнено">
           <Check size={17} />
+        </button>
+      ) : null}
+      {!isDone ? (
+        <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={onDelete} aria-label={`Удалить погашение долга ${item.name}`}>
+          <Trash2 size={16} />
         </button>
       ) : null}
     </div>

@@ -396,14 +396,11 @@ export async function markPlannedOperationDone(env: WorkerEnv, userId: string, o
   const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE id = ${operationId} AND "userId" = ${userId} LIMIT 1`;
   const planned = rows[0] as PlannedOperationRow | undefined;
   if (!planned) throw new Error("Planned operation not found");
+  if (planned.status === PlannedOperationStatus.done) return mapPlannedOperation(planned);
 
   const actualDate = actualDateInput ? new Date(actualDateInput).toISOString() : new Date().toISOString();
   const createdOperationId = id();
   const amount = toNumber(planned.amount);
-  await db`
-    INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt")
-    VALUES (${createdOperationId}, ${userId}, ${planned.kind}::"OperationKind", ${planned.name}, ${planned.amount}, ${actualDate}, ${planned.note}, ${planned.id}, ${planned.seriesId}, NOW())
-  `;
 
   const entries: { targetType: "account" | "debt"; targetId: string; amount: string }[] = [];
   if ((planned.kind === OperationKind.expense || planned.kind === OperationKind.debt_repayment || planned.kind === OperationKind.transfer) && planned.sourceAccountId) {
@@ -417,11 +414,26 @@ export async function markPlannedOperationDone(env: WorkerEnv, userId: string, o
   }
 
   for (const entry of entries) {
+    const target =
+      entry.targetType === "account"
+        ? await db`SELECT id FROM "Account" WHERE id = ${entry.targetId} AND "userId" = ${userId} LIMIT 1`
+        : await db`SELECT id FROM "Debt" WHERE id = ${entry.targetId} AND "userId" = ${userId} LIMIT 1`;
+    if (!target[0]) throw new Error(`${entry.targetType === "account" ? "Account" : "Debt"} not found for planned operation`);
+  }
+
+  await db`
+    INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt")
+    VALUES (${createdOperationId}, ${userId}, ${planned.kind}::"OperationKind", ${planned.name}, ${planned.amount}, ${actualDate}, ${planned.note}, ${planned.id}, ${planned.seriesId}, NOW())
+  `;
+
+  for (const entry of entries) {
     await db`INSERT INTO "OperationEntry" (id, "operationId", "targetType", "targetId", amount, "createdAt") VALUES (${id()}, ${createdOperationId}, ${entry.targetType}, ${entry.targetId}, ${entry.amount}, NOW())`;
     if (entry.targetType === "account") {
-      await db`UPDATE "Account" SET balance = balance + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId}`;
+      const updatedAccounts = await db`UPDATE "Account" SET balance = balance + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId} RETURNING id`;
+      if (!updatedAccounts[0]) throw new Error("Account not found for planned operation");
     } else {
-      await db`UPDATE "Debt" SET amount = amount + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId}`;
+      const updatedDebts = await db`UPDATE "Debt" SET amount = amount + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId} RETURNING id`;
+      if (!updatedDebts[0]) throw new Error("Debt not found for planned operation");
     }
   }
 

@@ -13,7 +13,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
   const [newAccountName, setNewAccountName] = useState("");
   const [newAccountBalance, setNewAccountBalance] = useState("0.00");
   const [newDebtName, setNewDebtName] = useState("");
-  const [newDebtAmount, setNewDebtAmount] = useState("-0.00");
+  const [newDebtAmount, setNewDebtAmount] = useState("0.00");
 
   useEffect(() => {
     setAccounts(wallet.data.accounts.map((item) => ({ id: item.id, balance: item.balance })));
@@ -62,7 +62,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
     }
 
     setNewDebtName("");
-    setNewDebtAmount("-0.00");
+    setNewDebtAmount("0.00");
   }
 
   async function deleteAccount(id: string) {
@@ -119,11 +119,18 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
           <span className="font-bold text-mint">{money(wallet.data.balances.accountBalance)}</span>
         </div>
 
-        <div className="mb-3 grid grid-cols-[1fr_104px_42px] gap-2">
-          <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Название" value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} />
-          <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right" inputMode="decimal" value={newAccountBalance} onChange={(event) => setNewAccountBalance(event.target.value)} />
-          <button className="grid place-items-center rounded-md bg-mint text-ink" type="button" onClick={() => void addAccount()} aria-label="Добавить счёт">
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_124px]">
+          <label className="block text-xs font-bold text-slate-400">
+            Название счёта
+            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Карта, вклад, наличные" value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} />
+          </label>
+          <label className="block text-xs font-bold text-slate-400">
+            Остаток
+            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newAccountBalance} onChange={(event) => setNewAccountBalance(event.target.value)} />
+          </label>
+          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink sm:col-span-2" type="button" onClick={() => void addAccount()}>
             <Plus size={18} />
+            Добавить счёт
           </button>
         </div>
 
@@ -131,14 +138,15 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
           {wallet.data.accounts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Счетов пока нет. Добавьте карту, вклад или наличные.</p> : null}
           {wallet.data.accounts.map((item) => (
             <div key={item.id} className="grid grid-cols-[1fr_120px_38px] items-center gap-2 rounded-md border border-line p-3">
-              <span className="min-w-0 truncate font-bold">{item.name}</span>
+              <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
               <input
+                aria-label={`Остаток счёта ${item.name}`}
                 className="w-full rounded-md border border-line bg-ink px-3 py-2 text-right"
                 inputMode="decimal"
                 value={accounts.find((account) => account.id === item.id)?.balance ?? item.balance}
                 onChange={(event) => setAccounts((prev) => prev.map((account) => (account.id === item.id ? { ...account, balance: event.target.value } : account)))}
               />
-              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteAccount(item.id)} aria-label="Удалить счёт">
+              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteAccount(item.id)} aria-label={`Удалить счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
             </div>
@@ -149,32 +157,44 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-extrabold">Долги</h2>
-            <p className="text-sm text-slate-400">Кредиты, рассрочки и займы</p>
+            <h2 className="text-lg font-extrabold">Долговые счета</h2>
+            <p className="text-sm text-slate-400">Кредитки, кредиты, рассрочки и займы</p>
           </div>
           <span className="font-bold text-danger">{money(wallet.data.balances.debtBalance)}</span>
         </div>
 
-        <div className="mb-3 grid grid-cols-[1fr_104px_42px] gap-2">
-          <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Название" value={newDebtName} onChange={(event) => setNewDebtName(event.target.value)} />
-          <input className="min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right" inputMode="decimal" value={newDebtAmount} onChange={(event) => setNewDebtAmount(event.target.value)} />
-          <button className="grid place-items-center rounded-md bg-danger text-white" type="button" onClick={() => void addDebt()} aria-label="Добавить долг">
+        <div className="mb-3 rounded-2xl border border-danger/20 bg-danger/5 p-3 text-sm text-slate-300">
+          Введите сумму как положительное число. Приложение само сохранит её как долг со знаком минус.
+        </div>
+
+        <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_124px]">
+          <label className="block text-xs font-bold text-slate-400">
+            Название долгового счёта
+            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Кредитка, кредит, рассрочка" value={newDebtName} onChange={(event) => setNewDebtName(event.target.value)} />
+          </label>
+          <label className="block text-xs font-bold text-slate-400">
+            Сумма долга
+            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newDebtAmount} onChange={(event) => setNewDebtAmount(event.target.value)} />
+          </label>
+          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-danger px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addDebt()}>
             <Plus size={18} />
+            Добавить долговой счёт
           </button>
         </div>
 
         <div className="space-y-2">
-          {wallet.data.debts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Долгов пока нет.</p> : null}
+          {wallet.data.debts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.</p> : null}
           {wallet.data.debts.map((item) => (
             <div key={item.id} className="grid grid-cols-[1fr_120px_38px] items-center gap-2 rounded-md border border-line p-3">
-              <span className="font-bold">{item.name}</span>
+              <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
               <input
+                aria-label={`Остаток долгового счёта ${item.name}`}
                 className="w-full rounded-md border border-line bg-ink px-3 py-2 text-right"
                 inputMode="decimal"
                 value={debts.find((debt) => debt.id === item.id)?.amount ?? item.amount}
                 onChange={(event) => setDebts((prev) => prev.map((debt) => (debt.id === item.id ? { ...debt, amount: event.target.value } : debt)))}
               />
-              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteDebt(item.id)} aria-label="Удалить долг">
+              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteDebt(item.id)} aria-label={`Удалить долговой счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
             </div>
@@ -183,8 +203,10 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
       </Card>
 
       <Card>
-        <label className="block text-sm font-bold text-slate-300">Итог после корректировки</label>
-        <input className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-3 text-lg font-bold" inputMode="decimal" value={editedBalance} onChange={(event) => setEditedBalance(event.target.value)} />
+        <label className="block text-sm font-bold text-slate-300">
+          Итог после корректировки
+          <input className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-3 text-lg font-bold" inputMode="decimal" value={editedBalance} onChange={(event) => setEditedBalance(event.target.value)} />
+        </label>
         <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-mint px-4 py-3 font-extrabold text-ink" type="button" onClick={() => void reconcile()}>
           <RefreshCw size={18} />
           Сохранить остатки

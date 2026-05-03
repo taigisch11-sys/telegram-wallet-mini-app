@@ -54,7 +54,7 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
         onNavigate={onNavigate}
       />
 
-      <section className="space-y-3">
+      <section className="space-y-3 pb-24">
         <WalletAssetRow
           title="Счета"
           subtitle={state.accounts.length ? `${state.accounts.length} активных` : "Добавьте карту, вклад или наличные"}
@@ -121,10 +121,10 @@ function WalletAssetRow({
         <Icon size={28} strokeWidth={2.7} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[20px] font-extrabold tracking-[-0.02em] text-white">{title}</p>
-        <p className="truncate text-[15px] font-semibold text-[#a1a1a7]">{subtitle}</p>
+        <p className="break-words text-[20px] font-extrabold leading-tight tracking-[-0.02em] text-white">{title}</p>
+        <p className="break-words text-[15px] font-semibold leading-snug text-[#a1a1a7]">{subtitle}</p>
       </div>
-      <div className="text-right">
+      <div className="flex-none text-right">
         <p className="text-[18px] font-bold text-white">{amount}</p>
       </div>
     </button>
@@ -160,7 +160,7 @@ function AccountRow({
             <Landmark size={23} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[18px] font-extrabold text-white">{account.name}</p>
+            <p className="break-words text-[18px] font-extrabold leading-snug text-white">{account.name}</p>
             <p className="text-[13px] font-semibold text-[#8f8f95]">Быстрая корректировка счёта</p>
           </div>
         </div>
@@ -200,7 +200,7 @@ function AccountRow({
           <Landmark size={25} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[18px] font-extrabold text-white">{account.name}</p>
+          <p className="break-words text-[18px] font-extrabold leading-snug text-white">{account.name}</p>
           <p className="text-[14px] font-semibold text-[#8f8f95]">Счёт</p>
         </div>
         <p className="text-[18px] font-bold text-white">{money(account.balance)}</p>
@@ -224,7 +224,7 @@ function DebtRow({ debt, onClick }: { debt: DebtDto; onClick: () => void }) {
         <TrendingUp size={25} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[18px] font-extrabold text-white">{debt.name}</p>
+        <p className="break-words text-[18px] font-extrabold leading-snug text-white">{debt.name}</p>
         <p className="text-[14px] font-semibold text-[#8f8f95]">Обязательство</p>
       </div>
       <div className="flex items-center gap-2 text-right">

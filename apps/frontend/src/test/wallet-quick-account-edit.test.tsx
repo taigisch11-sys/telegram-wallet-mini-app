@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { demoState } from "../mock/state";
 import { WalletScreen } from "../screens/wallet-screen";
 
-function WalletHarness() {
-  const [data, setData] = useState<DashboardStateDto>(demoState);
+function WalletHarness({ initialState = demoState }: { initialState?: DashboardStateDto }) {
+  const [data, setData] = useState<DashboardStateDto>(initialState);
 
   return (
     <WalletScreen
@@ -34,5 +34,26 @@ describe("Wallet quick account correction", () => {
       expect(screen.getByText("80 000 ₽")).toBeInTheDocument();
     });
     expect(screen.getByText("120 200 ₽")).toBeInTheDocument();
+  });
+
+  it("does not force long account names into a single clipped line", () => {
+    render(
+      <WalletHarness
+        initialState={{
+          ...demoState,
+          accounts: [
+            {
+              id: "long-account",
+              name: "Карта для обязательных платежей и семейного резерва",
+              balance: "1000.00",
+              createdAt: new Date().toISOString()
+            }
+          ],
+          debts: []
+        }}
+      />
+    );
+
+    expect(screen.getByText("Карта для обязательных платежей и семейного резерва").className).not.toContain("truncate");
   });
 });

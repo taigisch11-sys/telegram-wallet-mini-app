@@ -1,0 +1,5 @@
+{
+  "block_on_severities": ["high", "blocker"],
+  "allow_skipped_ai_when": "AI_QA_REQUIRE is not 1",
+  "max_medium_findings": 8
+}

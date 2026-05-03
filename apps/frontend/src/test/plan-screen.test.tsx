@@ -24,8 +24,8 @@ describe("PlanScreen", () => {
   it("lets the user add, complete, and delete fixed plan items", async () => {
     render(<PlanHarness />);
 
-    fireEvent.change(screen.getAllByPlaceholderText("Название")[0], { target: { value: "Зарплата" } });
-    fireEvent.change(screen.getAllByDisplayValue("0.00")[0], { target: { value: "90000" } });
+    fireEvent.change(screen.getByLabelText("Название дохода"), { target: { value: "Зарплата" } });
+    fireEvent.change(screen.getByLabelText("Сумма дохода"), { target: { value: "90000" } });
     fireEvent.click(screen.getByLabelText("Добавить доход"));
 
     expect(await screen.findByText("Зарплата")).toBeInTheDocument();
@@ -34,8 +34,8 @@ describe("PlanScreen", () => {
     fireEvent.click(screen.getByLabelText("Получено"));
     await waitFor(() => expect(screen.getByText("Получено")).toBeInTheDocument());
 
-    fireEvent.change(screen.getAllByPlaceholderText("Название")[1], { target: { value: "Аренда" } });
-    fireEvent.change(screen.getAllByDisplayValue("0.00")[1], { target: { value: "35000" } });
+    fireEvent.change(screen.getByLabelText("Название платежа"), { target: { value: "Аренда" } });
+    fireEvent.change(screen.getByLabelText("Сумма платежа"), { target: { value: "35000" } });
     fireEvent.click(screen.getByLabelText("Добавить платёж"));
 
     expect(await screen.findByText("Аренда")).toBeInTheDocument();
@@ -50,8 +50,8 @@ describe("PlanScreen", () => {
   it("creates a monthly payment schedule with a different final payment", async () => {
     render(<PlanHarness />);
 
-    fireEvent.change(screen.getAllByPlaceholderText("Название")[1], { target: { value: "Оборотный кредит" } });
-    fireEvent.change(screen.getAllByDisplayValue("0.00")[1], { target: { value: "15485" } });
+    fireEvent.change(screen.getByLabelText("Название платежа"), { target: { value: "Оборотный кредит" } });
+    fireEvent.change(screen.getByLabelText("Сумма платежа"), { target: { value: "15485" } });
     fireEvent.change(screen.getByLabelText("Добавить платёж: дата"), { target: { value: "2026-05-22" } });
 
     fireEvent.click(screen.getByText("Создать график"));
@@ -95,6 +95,29 @@ describe("PlanScreen", () => {
     await waitFor(() => {
       expect(screen.getByText("70 000 ₽")).toBeInTheDocument();
       expect(screen.getByText("-60 000 ₽")).toBeInTheDocument();
+    });
+  });
+
+  it("lets the user delete a planned debt repayment before it is done", async () => {
+    render(
+      <PlanHarness
+        initialState={{
+          ...emptyState,
+          accounts: [{ id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() }],
+          debts: [{ id: "credit-card", name: "Кредитка", amount: "-30000.00", createdAt: new Date().toISOString() }]
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Название погашения"), { target: { value: "Погашение кредитки" } });
+    fireEvent.change(screen.getByLabelText("Сумма погашения"), { target: { value: "10000" } });
+    fireEvent.click(screen.getByLabelText("Добавить погашение долга"));
+
+    expect(await screen.findByText("Погашение кредитки")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Удалить погашение долга Погашение кредитки"));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Погашение кредитки")).not.toBeInTheDocument();
     });
   });
 });

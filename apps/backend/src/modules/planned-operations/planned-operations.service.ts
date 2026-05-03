@@ -77,6 +77,7 @@ export async function markPlannedOperationDone(userId: string, id: string, actua
   const result = await prisma.$transaction(async (tx) => {
     const planned = await tx.plannedOperation.findFirst({ where: { id, userId } });
     if (!planned) throw notFound("Planned operation not found");
+    if (planned.status === "done") return planned;
 
     const amount = Number(planned.amount);
     const entries: { targetType: "account" | "debt"; targetId: string; amount: string }[] = [];
@@ -107,9 +108,11 @@ export async function markPlannedOperationDone(userId: string, id: string, actua
 
     for (const entry of entries) {
       if (entry.targetType === "account") {
-        await tx.account.updateMany({ where: { id: entry.targetId, userId }, data: { balance: { increment: entry.amount } } });
+        const updatedAccounts = await tx.account.updateMany({ where: { id: entry.targetId, userId }, data: { balance: { increment: entry.amount } } });
+        if (updatedAccounts.count !== 1) throw notFound("Account not found for planned operation");
       } else {
-        await tx.debt.updateMany({ where: { id: entry.targetId, userId }, data: { amount: { increment: entry.amount } } });
+        const updatedDebts = await tx.debt.updateMany({ where: { id: entry.targetId, userId }, data: { amount: { increment: entry.amount } } });
+        if (updatedDebts.count !== 1) throw notFound("Debt not found for planned operation");
       }
     }
 

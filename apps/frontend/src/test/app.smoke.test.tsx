@@ -13,8 +13,18 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.queryByText("Закрыть")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Выбрать период")).toHaveTextContent("Май 2026");
-    expect(screen.getByLabelText("Быстро добавить")).toBeInTheDocument();
+    expect(screen.getByLabelText("Текущий месяц")).toHaveTextContent("Май 2026");
+    expect(screen.getByLabelText("Открыть быстрые действия")).toBeInTheDocument();
+  });
+
+  it("opens real quick actions from the top plus button", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText("Открыть быстрые действия"));
+    expect(screen.getByRole("button", { name: "Долговой счёт" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Долговой счёт" }));
+    expect(screen.getByText("Долговые счета")).toBeInTheDocument();
   });
 
   it("connects primary wallet actions to real screens", () => {

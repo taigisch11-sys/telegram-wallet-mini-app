@@ -31,7 +31,7 @@ export function UpcomingList({ items, onNavigatePlan }: { items: UpcomingEventDt
               {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[18px] font-extrabold text-white">{item.title}</p>
+              <p className="break-words text-[18px] font-extrabold leading-snug text-white">{item.title}</p>
               <p className="text-[15px] font-semibold text-[#9a9aa0]">{shortDate(item.date)}</p>
             </div>
             <div className="text-right">
