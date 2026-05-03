@@ -11,7 +11,7 @@ export function AlertsPanel({ alerts }: { alerts: AlertDto[] }) {
         </div>
         <div>
           <p className="text-[18px] font-extrabold text-white">Рисков не видно</p>
-          <p className="text-[15px] font-semibold text-[#9a9aa0]">План и текущий баланс сходятся.</p>
+          <p className="text-[15px] font-semibold text-[#9a9aa0]">Критичных просрочек и кассового разрыва не видно.</p>
         </div>
       </Card>
     );

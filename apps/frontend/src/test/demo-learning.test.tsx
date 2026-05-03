@@ -12,7 +12,9 @@ describe("Demo and learning modes", () => {
     expect(screen.getByText("Демо-режим")).toBeInTheDocument();
     expect(screen.getByText("Режим обучения")).toBeInTheDocument();
     expect(screen.getByText("Чек-лист функций")).toBeInTheDocument();
+    expect(screen.getByText("Чек-лист показателей")).toBeInTheDocument();
     expect(screen.getByText("Сверка остатков по счетам и долгам")).toBeInTheDocument();
+    expect(screen.getByText("Покрытие ближайших обязательств")).toBeInTheDocument();
   });
 
   it("starts a visual demo with realistic sample finance data", () => {

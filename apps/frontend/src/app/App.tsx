@@ -67,9 +67,9 @@ export function App() {
   return (
     <Shell active={screen} onNavigate={setScreen}>
       {demoEnabled ? (
-        <div className="mb-4 rounded-[24px] border border-[#32d178]/40 bg-[#123926] px-4 py-3 text-sm font-extrabold text-[#b8ffd8]">
-          <span className="mr-2 rounded-full bg-[#32d178] px-2 py-1 text-xs text-[#07160f]">Демо-режим</span>
-          Показаны примерные данные, реальные записи не меняются.
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[24px] border border-[#32d178]/40 bg-[#123926] px-4 py-3 text-sm font-extrabold text-[#b8ffd8]">
+          <span className="rounded-full bg-[#32d178] px-2 py-1 text-xs text-[#07160f]">Демо-режим</span>
+          <span>Показаны примерные данные, реальные записи не меняются.</span>
         </div>
       ) : null}
       {learningEnabled ? <LearningCoach step={learningStep} onStep={setLearningStep} onNavigate={setScreen} onClose={() => setLearningEnabled(false)} /> : null}

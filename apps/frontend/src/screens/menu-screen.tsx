@@ -1,6 +1,7 @@
 import { BarChart3, BookOpen, CheckCircle2, Clock3, FlaskConical, PlayCircle } from "lucide-react";
 import type { Screen } from "../app/App";
 import { Card } from "../components/common/card";
+import { financialIndicatorChecklist } from "../components/wallet/financial-indicators";
 
 export const userFunctionChecklist = [
   "Сверка остатков по счетам и долгам",
@@ -69,6 +70,18 @@ export function MenuScreen({
           {userFunctionChecklist.map((item) => (
             <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
               <CheckCircle2 className="mt-0.5 flex-none text-[#32d178]" size={17} />
+              <p className="text-sm font-semibold leading-5 text-slate-200">{item}</p>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-lg font-extrabold">Чек-лист показателей</h2>
+        <div className="space-y-2">
+          {financialIndicatorChecklist.map((item) => (
+            <div key={item} className="flex items-start gap-2 rounded-2xl border border-white/8 bg-white/[0.03] p-3">
+              <CheckCircle2 className="mt-0.5 flex-none text-[#8bd3ff]" size={17} />
               <p className="text-sm font-semibold leading-5 text-slate-200">{item}</p>
             </div>
           ))}

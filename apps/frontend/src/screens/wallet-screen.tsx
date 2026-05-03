@@ -4,6 +4,7 @@ import type { Screen } from "../app/App";
 import { AlertsPanel } from "../components/wallet/alerts-panel";
 import { BalanceHero } from "../components/wallet/balance-hero";
 import { FinanceTimeline } from "../components/wallet/finance-timeline";
+import { FinancialIndicators } from "../components/wallet/financial-indicators";
 import { UpcomingList } from "../components/wallet/upcoming-list";
 import { useWalletState } from "../hooks/use-state";
 import { money } from "../lib/format";
@@ -51,6 +52,7 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
       </section>
 
       <AlertsPanel alerts={state.alerts} />
+      <FinancialIndicators state={state} />
       <FinanceTimeline state={state} />
       <UpcomingList items={state.upcoming} onNavigatePlan={() => onNavigate("plan")} />
     </div>
