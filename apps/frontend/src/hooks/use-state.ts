@@ -34,6 +34,7 @@ export function useWalletState() {
   const [data, setRawData] = useState<DashboardStateDto>(() => readLocalState());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
 
   function setData(next: DashboardStateDto | ((current: DashboardStateDto) => DashboardStateDto)) {
     setRawData((current) => {
@@ -47,10 +48,12 @@ export function useWalletState() {
     try {
       setError(null);
       const hasTelegramSession = await authenticate();
+      setRemoteAvailable(hasTelegramSession);
       if (!hasTelegramSession) return;
       const next = await api.state();
       setData(normalizeDashboardState(next));
     } catch (err) {
+      setRemoteAvailable(false);
       setError(err instanceof Error ? err.message : "Не удалось обновить данные");
     } finally {
       setLoading(false);
@@ -66,5 +69,5 @@ export function useWalletState() {
     void refresh();
   }, []);
 
-  return { data, loading, error, refresh, setData };
+  return { data, loading, error, remoteAvailable, refresh, setData };
 }

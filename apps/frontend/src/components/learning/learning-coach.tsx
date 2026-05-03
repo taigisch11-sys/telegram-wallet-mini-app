@@ -50,6 +50,12 @@ export function LearningCoach({
   const canGoBack = step > 0;
 
   function go() {
+    if (isLast) {
+      onStep(0);
+      onNavigate(steps[0].target);
+      return;
+    }
+
     onNavigate(current.target);
     onStep(Math.min(step + 1, steps.length - 1));
   }

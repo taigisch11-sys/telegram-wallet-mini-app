@@ -6,7 +6,7 @@ import { Badge } from "../components/common/badge";
 import { Card } from "../components/common/card";
 import { useWalletState } from "../hooks/use-state";
 import { api } from "../lib/api";
-import { money, shortDate } from "../lib/format";
+import { money } from "../lib/format";
 import { recalculateLocalState } from "../lib/local-finance";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -15,7 +15,9 @@ const plannedPaymentStatus = "planned" satisfies PaymentStatus;
 const receivedIncomeStatus = "received_on_time" satisfies IncomeStatus;
 const paidPaymentStatus = "paid_on_time" satisfies PaymentStatus;
 
-export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletState> }) {
+type WalletState = Omit<ReturnType<typeof useWalletState>, "remoteAvailable"> & { remoteAvailable?: boolean };
+
+export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; demoMode?: boolean }) {
   const [incomeName, setIncomeName] = useState("");
   const [incomeAmount, setIncomeAmount] = useState("0.00");
   const [incomeDate, setIncomeDate] = useState(today);
@@ -31,41 +33,58 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
   const [repaymentDate, setRepaymentDate] = useState(today);
   const [repaymentSourceAccountId, setRepaymentSourceAccountId] = useState("");
   const [repaymentTargetDebtId, setRepaymentTargetDebtId] = useState("");
+  const [repaymentRepeatEnabled, setRepaymentRepeatEnabled] = useState(false);
+  const [repaymentRepeatCount, setRepaymentRepeatCount] = useState("10");
+  const [repaymentFinalDiffers, setRepaymentFinalDiffers] = useState(false);
+  const [repaymentFinalAmount, setRepaymentFinalAmount] = useState("0.00");
+
   const selectedRepaymentAccountId = repaymentSourceAccountId || wallet.data.accounts[0]?.id || "";
   const selectedRepaymentDebtId = repaymentTargetDebtId || wallet.data.debts[0]?.id || "";
   const selectedRepaymentAccount = wallet.data.accounts.find((account) => account.id === selectedRepaymentAccountId) ?? wallet.data.accounts[0];
   const selectedRepaymentDebt = wallet.data.debts.find((debt) => debt.id === selectedRepaymentDebtId) ?? wallet.data.debts[0];
-  const repaymentPreviewAmount = Number(repaymentAmount || 0);
+  const paymentScheduleCount = Number(paymentRepeatCount);
+  const paymentScheduleInvalid = paymentRepeatEnabled && (!Number.isFinite(paymentScheduleCount) || paymentScheduleCount < 1 || paymentScheduleCount > 120);
+  const repaymentScheduleCount = Number(repaymentRepeatCount);
+  const repaymentScheduleInvalid = repaymentRepeatEnabled && (!Number.isFinite(repaymentScheduleCount) || repaymentScheduleCount < 1 || repaymentScheduleCount > 120);
+  const repaymentSchedulePreview = repaymentRepeatEnabled && !repaymentScheduleInvalid
+    ? generateMonthlySchedule({
+        startDate: repaymentDate,
+        count: repaymentScheduleCount,
+        amount: repaymentAmount,
+        finalAmount: repaymentFinalDiffers ? repaymentFinalAmount : null
+      })
+    : [{ amount: normalizeMoney(repaymentAmount), plannedDate: repaymentDate }];
+  const repaymentPreviewAmount = repaymentSchedulePreview.reduce((sum, item) => sum + Number(item.amount), 0);
   const repaymentDebtAfter = selectedRepaymentDebt ? Number(selectedRepaymentDebt.amount) + repaymentPreviewAmount : 0;
   const repaymentExceedsDebt = selectedRepaymentDebt ? repaymentPreviewAmount > Math.abs(Number(selectedRepaymentDebt.amount)) : false;
+  const localOnly = demoMode || wallet.remoteAvailable !== true;
 
   async function addIncome() {
     const name = incomeName.trim();
     if (!name) return;
     const amount = normalizeMoney(incomeAmount);
     const plannedDate = new Date(incomeDate).toISOString();
+    const income: IncomeDto = {
+      id: createId(),
+      name,
+      amount,
+      plannedDate,
+      expectedDate: null,
+      actualDate: null,
+      effectiveDate: plannedDate,
+      status: plannedIncomeStatus,
+      note: null
+    };
 
-    try {
-      await api.createIncome({ name, amount, plannedDate });
-      await wallet.refresh();
-    } catch {
-      wallet.setData((current) => recalculateLocalState({
-        ...current,
-        income: [
-          ...current.income,
-          {
-            id: createId(),
-            name,
-            amount,
-            plannedDate,
-            expectedDate: null,
-            actualDate: null,
-            effectiveDate: plannedDate,
-            status: plannedIncomeStatus,
-            note: null
-          }
-        ]
-      }));
+    if (localOnly) {
+      applyLocalIncome(income);
+    } else {
+      try {
+        await api.createIncome({ name, amount, plannedDate });
+        await wallet.refresh();
+      } catch {
+        applyLocalIncome(income);
+      }
     }
 
     setIncomeName("");
@@ -75,7 +94,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
 
   async function addPayment() {
     const name = paymentName.trim();
-    if (!name) return;
+    if (!name || paymentScheduleInvalid) return;
     const schedule = paymentRepeatEnabled
       ? generateMonthlySchedule({
           startDate: paymentDate,
@@ -96,16 +115,17 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
       note: null
     }));
 
-    try {
-      for (const payment of payments) {
-        await api.createPayment({ name, amount: payment.amount, plannedDate: payment.plannedDate });
+    if (localOnly) {
+      applyLocalPayments(payments);
+    } else {
+      try {
+        for (const payment of payments) {
+          await api.createPayment({ name, amount: payment.amount, plannedDate: payment.plannedDate });
+        }
+        await wallet.refresh();
+      } catch {
+        applyLocalPayments(payments);
       }
-      await wallet.refresh();
-    } catch {
-      wallet.setData((current) => recalculateLocalState({
-        ...current,
-        payments: [...current.payments, ...payments]
-      }));
     }
 
     setPaymentName("");
@@ -118,44 +138,58 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
   }
 
   async function markIncome(id: string) {
+    if (localOnly) {
+      applyLocalMarkIncome(id);
+      return;
+    }
+
     try {
       await api.markIncome(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({
-        ...current,
-        income: current.income.map((item) => (item.id === id ? { ...item, status: receivedIncomeStatus, actualDate: new Date().toISOString() } : item))
-      }));
+      applyLocalMarkIncome(id);
     }
   }
 
   async function markPayment(id: string) {
+    if (localOnly) {
+      applyLocalMarkPayment(id);
+      return;
+    }
+
     try {
       await api.markPayment(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({
-        ...current,
-        payments: current.payments.map((item) => (item.id === id ? { ...item, status: paidPaymentStatus, actualDate: new Date().toISOString() } : item))
-      }));
+      applyLocalMarkPayment(id);
     }
   }
 
   async function deleteIncome(id: string) {
+    if (localOnly) {
+      applyLocalDeleteIncome(id);
+      return;
+    }
+
     try {
       await api.deleteIncome(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, income: current.income.filter((item) => item.id !== id) }));
+      applyLocalDeleteIncome(id);
     }
   }
 
   async function deletePayment(id: string) {
+    if (localOnly) {
+      applyLocalDeletePayment(id);
+      return;
+    }
+
     try {
       await api.deletePayment(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, payments: current.payments.filter((item) => item.id !== id) }));
+      applyLocalDeletePayment(id);
     }
   }
 
@@ -164,96 +198,179 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
     const sourceAccount = selectedRepaymentAccount;
     const targetDebt = selectedRepaymentDebt;
     if (!name || !sourceAccount || !targetDebt) return;
+    if (repaymentExceedsDebt || repaymentPreviewAmount <= 0 || repaymentScheduleInvalid) return;
 
-    const plannedDate = new Date(repaymentDate).toISOString();
-    const item: PlannedOperationDto = {
-      id: createId(),
-      kind: "debt_repayment",
-      name,
-      amount: normalizeMoney(repaymentAmount),
-      plannedDate,
-      expectedDate: null,
-      actualDate: null,
-      effectiveDate: plannedDate,
-      status: "planned",
-      note: null,
-      sourceAccountId: sourceAccount.id,
-      targetAccountId: null,
-      targetDebtId: targetDebt.id,
-      seriesId: null
-    };
+    const seriesId = repaymentRepeatEnabled ? createId() : null;
+    const items: PlannedOperationDto[] = repaymentSchedulePreview.map((scheduleItem) => {
+      const plannedDate = new Date(scheduleItem.plannedDate).toISOString();
+      return {
+        id: createId(),
+        kind: "debt_repayment",
+        name,
+        amount: normalizeMoney(scheduleItem.amount),
+        plannedDate,
+        expectedDate: null,
+        actualDate: null,
+        effectiveDate: plannedDate,
+        status: "planned",
+        note: null,
+        sourceAccountId: sourceAccount.id,
+        targetAccountId: null,
+        targetDebtId: targetDebt.id,
+        seriesId
+      };
+    });
 
-    try {
-      await api.createPlannedOperation(item);
-      await wallet.refresh();
-    } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, plannedOperations: [...current.plannedOperations, item] }));
+    if (localOnly) {
+      applyLocalDebtRepayments(items);
+    } else {
+      try {
+        if (repaymentRepeatEnabled) {
+          await api.createPlannedOperationSeries({
+            kind: "debt_repayment",
+            name,
+            amount: normalizeMoney(repaymentAmount),
+            startDate: repaymentDate,
+            count: Math.floor(repaymentScheduleCount),
+            finalAmount: repaymentFinalDiffers ? normalizeMoney(repaymentFinalAmount) : undefined,
+            sourceAccountId: sourceAccount.id,
+            targetDebtId: targetDebt.id
+          });
+        } else {
+          await api.createPlannedOperation(items[0]);
+        }
+        await wallet.refresh();
+      } catch {
+        applyLocalDebtRepayments(items);
+      }
     }
 
     setRepaymentName("");
     setRepaymentAmount("0.00");
     setRepaymentDate(today());
+    setRepaymentRepeatEnabled(false);
+    setRepaymentRepeatCount("10");
+    setRepaymentFinalDiffers(false);
+    setRepaymentFinalAmount("0.00");
   }
 
   async function markDebtRepayment(item: PlannedOperationDto) {
+    if (isDebtRepaymentOverLimit(item, wallet.data.debts)) return;
+
+    if (localOnly) {
+      applyLocalMarkDebtRepayment(item);
+      return;
+    }
+
     try {
       await api.markPlannedOperation(item.id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => {
-        const amount = Number(item.amount);
-        const result = applyOperationEntries(
-          {
-            accounts: current.accounts.map((account) => ({ id: account.id, balance: Number(account.balance) })),
-            debts: current.debts.map((debt) => ({ id: debt.id, amount: Number(debt.amount) }))
-          },
-          [
-            { targetType: "account", targetId: item.sourceAccountId ?? "", amount: -amount },
-            { targetType: "debt", targetId: item.targetDebtId ?? "", amount }
-          ]
-        );
-
-        return recalculateLocalState({
-          ...current,
-          accounts: current.accounts.map((account) => ({
-            ...account,
-            balance: (result.accounts.find((entry) => entry.id === account.id)?.balance ?? Number(account.balance)).toFixed(2)
-          })),
-          debts: current.debts.map((debt) => ({
-            ...debt,
-            amount: (result.debts.find((entry) => entry.id === debt.id)?.amount ?? Number(debt.amount)).toFixed(2)
-          })),
-          plannedOperations: current.plannedOperations.map((operation) => (operation.id === item.id ? { ...operation, status: "done", actualDate: new Date().toISOString() } : operation)),
-          operations: [
-            ...current.operations,
-            {
-              id: createId(),
-              kind: "debt_repayment",
-              name: item.name,
-              amount: item.amount,
-              operationDate: new Date().toISOString(),
-              note: "Погашение долга",
-              plannedOperationId: item.id,
-              seriesId: item.seriesId,
-              createdAt: new Date().toISOString(),
-              entries: [
-                { id: createId(), targetType: "account", targetId: item.sourceAccountId ?? "", amount: (-amount).toFixed(2) },
-                { id: createId(), targetType: "debt", targetId: item.targetDebtId ?? "", amount: amount.toFixed(2) }
-              ]
-            }
-          ]
-        });
-      });
+      applyLocalMarkDebtRepayment(item);
     }
   }
 
   async function deleteDebtRepayment(id: string) {
+    if (localOnly) {
+      applyLocalDeleteDebtRepayment(id);
+      return;
+    }
+
     try {
       await api.deletePlannedOperation(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, plannedOperations: current.plannedOperations.filter((item) => item.id !== id) }));
+      applyLocalDeleteDebtRepayment(id);
     }
+  }
+
+  function applyLocalIncome(item: IncomeDto) {
+    wallet.setData((current) => recalculateLocalState({ ...current, income: [...current.income, item] }));
+  }
+
+  function applyLocalPayments(items: PaymentDto[]) {
+    wallet.setData((current) => recalculateLocalState({ ...current, payments: [...current.payments, ...items] }));
+  }
+
+  function applyLocalMarkIncome(id: string) {
+    wallet.setData((current) =>
+      recalculateLocalState({
+        ...current,
+        income: current.income.map((item) => (item.id === id ? { ...item, status: receivedIncomeStatus, actualDate: new Date().toISOString() } : item))
+      })
+    );
+  }
+
+  function applyLocalMarkPayment(id: string) {
+    wallet.setData((current) =>
+      recalculateLocalState({
+        ...current,
+        payments: current.payments.map((item) => (item.id === id ? { ...item, status: paidPaymentStatus, actualDate: new Date().toISOString() } : item))
+      })
+    );
+  }
+
+  function applyLocalDeleteIncome(id: string) {
+    wallet.setData((current) => recalculateLocalState({ ...current, income: current.income.filter((item) => item.id !== id) }));
+  }
+
+  function applyLocalDeletePayment(id: string) {
+    wallet.setData((current) => recalculateLocalState({ ...current, payments: current.payments.filter((item) => item.id !== id) }));
+  }
+
+  function applyLocalDebtRepayments(items: PlannedOperationDto[]) {
+    wallet.setData((current) => recalculateLocalState({ ...current, plannedOperations: [...current.plannedOperations, ...items] }));
+  }
+
+  function applyLocalDeleteDebtRepayment(id: string) {
+    wallet.setData((current) => recalculateLocalState({ ...current, plannedOperations: current.plannedOperations.filter((item) => item.id !== id) }));
+  }
+
+  function applyLocalMarkDebtRepayment(item: PlannedOperationDto) {
+    wallet.setData((current) => {
+      const amount = Number(item.amount);
+      const result = applyOperationEntries(
+        {
+          accounts: current.accounts.map((account) => ({ id: account.id, balance: Number(account.balance) })),
+          debts: current.debts.map((debt) => ({ id: debt.id, amount: Number(debt.amount) }))
+        },
+        [
+          { targetType: "account", targetId: item.sourceAccountId ?? "", amount: -amount },
+          { targetType: "debt", targetId: item.targetDebtId ?? "", amount }
+        ]
+      );
+
+      return recalculateLocalState({
+        ...current,
+        accounts: current.accounts.map((account) => ({
+          ...account,
+          balance: (result.accounts.find((entry) => entry.id === account.id)?.balance ?? Number(account.balance)).toFixed(2)
+        })),
+        debts: current.debts.map((debt) => ({
+          ...debt,
+          amount: (result.debts.find((entry) => entry.id === debt.id)?.amount ?? Number(debt.amount)).toFixed(2)
+        })),
+        plannedOperations: current.plannedOperations.map((operation) => (operation.id === item.id ? { ...operation, status: "done", actualDate: new Date().toISOString() } : operation)),
+        operations: [
+          ...current.operations,
+          {
+            id: createId(),
+            kind: "debt_repayment",
+            name: item.name,
+            amount: item.amount,
+            operationDate: new Date().toISOString(),
+            note: "Погашение долга",
+            plannedOperationId: item.id,
+            seriesId: item.seriesId,
+            createdAt: new Date().toISOString(),
+            entries: [
+              { id: createId(), targetType: "account", targetId: item.sourceAccountId ?? "", amount: (-amount).toFixed(2) },
+              { id: createId(), targetType: "debt", targetId: item.targetDebtId ?? "", amount: amount.toFixed(2) }
+            ]
+          }
+        ]
+      });
+    });
   }
 
   return (
@@ -293,6 +410,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           onAmount={setPaymentAmount}
           onDate={setPaymentDate}
           onSubmit={() => void addPayment()}
+          disabled={paymentScheduleInvalid}
         />
         <ScheduleBuilder
           enabled={paymentRepeatEnabled}
@@ -304,6 +422,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           onFinalDiffers={setPaymentFinalDiffers}
           onFinalAmount={setPaymentFinalAmount}
         />
+        {paymentScheduleInvalid ? <p className="mt-2 rounded-2xl border border-amber/35 bg-amber/10 px-3 py-2 text-sm font-bold text-amber">Можно создать не больше 120 платежей за раз.</p> : null}
         {wallet.data.payments.length === 0 ? <p className="mt-3 rounded-md border border-line p-3 text-sm text-slate-400">Обязательных платежей пока нет.</p> : null}
         <div className="mt-3 space-y-3">
           {wallet.data.payments.map((item) => (
@@ -354,17 +473,34 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-[1fr_104px_42px] gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_104px_42px]">
               <input aria-label="Название погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Погашение кредитки" value={repaymentName} onChange={(event) => setRepaymentName(event.target.value)} />
               <AmountInput label="Сумма погашения" value={repaymentAmount} onChange={setRepaymentAmount} compact showLabel={false} />
-              <button className="grid place-items-center rounded-md bg-action text-white" type="button" onClick={() => void addDebtRepayment()} aria-label="Добавить погашение долга">
-                <Plus size={18} />
+              <button
+                className="min-h-11 rounded-md bg-action text-white disabled:bg-white/10 disabled:text-slate-500"
+                type="button"
+                onClick={() => void addDebtRepayment()}
+                aria-label="Добавить погашение долга"
+                disabled={repaymentExceedsDebt || repaymentPreviewAmount <= 0 || repaymentScheduleInvalid}
+              >
+                <Plus className="mx-auto" size={18} />
               </button>
-              <input className="col-span-3 rounded-md border border-line bg-ink px-3 py-2 text-sm" type="date" value={repaymentDate} onChange={(event) => setRepaymentDate(event.target.value)} aria-label="Дата погашения" />
+              <input className="rounded-md border border-line bg-ink px-3 py-2 text-sm sm:col-span-3" type="date" value={repaymentDate} onChange={(event) => setRepaymentDate(event.target.value)} aria-label="Дата погашения" />
             </div>
+            <ScheduleBuilder
+              enabled={repaymentRepeatEnabled}
+              count={repaymentRepeatCount}
+              finalDiffers={repaymentFinalDiffers}
+              finalAmount={repaymentFinalAmount}
+              onToggle={() => setRepaymentRepeatEnabled((value) => !value)}
+              onCount={setRepaymentRepeatCount}
+              onFinalDiffers={setRepaymentFinalDiffers}
+              onFinalAmount={setRepaymentFinalAmount}
+            />
+            {repaymentScheduleInvalid ? <p className="mt-2 rounded-2xl border border-amber/35 bg-amber/10 px-3 py-2 text-sm font-bold text-amber">Можно создать не больше 120 платежей за раз.</p> : null}
             <div className={`mt-3 rounded-[22px] border p-3 text-sm font-semibold ${repaymentExceedsDebt ? "border-amber/35 bg-amber/10 text-amber" : "border-action/25 bg-action/10 text-slate-200"}`}>
               {repaymentExceedsDebt ? (
-                <span>Сумма больше текущего долга. Проверьте остаток перед добавлением.</span>
+                <span>Сумма больше текущего долга. Уменьшите платёж или обновите остаток долга.</span>
               ) : (
                 <span>
                   С {selectedRepaymentAccount.name} спишется {money(repaymentPreviewAmount.toFixed(2))}, долг станет {money(repaymentDebtAfter.toFixed(2))}.
@@ -377,7 +513,7 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
           {wallet.data.plannedOperations
             .filter((item) => item.kind === "debt_repayment")
             .map((item) => (
-              <DebtRepaymentRow key={item.id} item={item} onDelete={() => void deleteDebtRepayment(item.id)} onDone={() => void markDebtRepayment(item)} />
+              <DebtRepaymentRow key={item.id} item={item} debts={wallet.data.debts} onDelete={() => void deleteDebtRepayment(item.id)} onDone={() => void markDebtRepayment(item)} />
             ))}
         </div>
       </Card>
@@ -395,7 +531,8 @@ function PlanForm({
   onName,
   onAmount,
   onDate,
-  onSubmit
+  onSubmit,
+  disabled = false
 }: {
   name: string;
   amount: string;
@@ -407,6 +544,7 @@ function PlanForm({
   onAmount: (value: string) => void;
   onDate: (value: string) => void;
   onSubmit: () => void;
+  disabled?: boolean;
 }) {
   return (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_110px_42px]">
@@ -418,7 +556,13 @@ function PlanForm({
         <p className="text-xs font-bold text-slate-400">{amountLabel}</p>
         <AmountInput label={amountLabel} value={amount} onChange={onAmount} compact showLabel={false} />
       </div>
-      <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:mt-5 sm:w-11 sm:px-0" type="button" onClick={onSubmit} aria-label={actionLabel}>
+      <button
+        className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white disabled:bg-white/10 disabled:text-slate-500 sm:mt-5 sm:w-11 sm:px-0"
+        type="button"
+        onClick={onSubmit}
+        aria-label={actionLabel}
+        disabled={disabled}
+      >
         <Plus size={18} />
         <span className="sm:hidden">{actionLabel}</span>
       </button>
@@ -453,11 +597,13 @@ function ScheduleBuilder({
   onFinalDiffers: (value: boolean) => void;
   onFinalAmount: (value: string) => void;
 }) {
+  const countValue = Number(count) || 1;
+  const badge = enabled ? `${count || 1} ${paymentWord(countValue)}` : "выкл";
   return (
     <div className="mt-3 rounded-[22px] border border-white/10 bg-white/[0.03] p-3">
       <button type="button" className="flex w-full items-center justify-between text-left text-sm font-extrabold text-action" onClick={onToggle}>
-        Создать график
-        <span className="rounded-full bg-action/15 px-2 py-1 text-xs text-action">{enabled ? "включён" : "ежемесячно"}</span>
+        Размножить платежи
+        <span className="rounded-full bg-action/15 px-2 py-1 text-xs text-action">{badge}</span>
       </button>
       {enabled ? (
         <div className="mt-3 space-y-3">
@@ -523,21 +669,23 @@ function DebtBalance({ label, amount, tone }: { label: string; amount: string; t
   );
 }
 
-function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDto; onDelete: () => void; onDone: () => void }) {
+function DebtRepaymentRow({ item, debts, onDelete, onDone }: { item: PlannedOperationDto; debts: { id: string; amount: string }[]; onDelete: () => void; onDone: () => void }) {
   const isDone = item.status === "done";
+  const overLimit = isDebtRepaymentOverLimit(item, debts);
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
       <WalletCards className="text-action" size={20} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold">{item.name}</p>
         <p className="text-xs text-slate-500">Погашение долга • {planDate(item.effectiveDate)}</p>
+        {overLimit && !isDone ? <p className="mt-1 text-xs font-bold text-amber">Сумма погашения больше текущего долга</p> : null}
       </div>
       <div className="text-right">
         <p className="font-bold">{money(item.amount)}</p>
         <Badge status={item.status} />
       </div>
       {!isDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f]" type="button" onClick={onDone} aria-label="Погашение выполнено">
+        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f] disabled:bg-white/10 disabled:text-slate-500" type="button" onClick={onDone} aria-label="Погашение выполнено" disabled={overLimit}>
           <Check size={17} />
         </button>
       ) : null}
@@ -548,6 +696,25 @@ function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDt
       ) : null}
     </div>
   );
+}
+
+function isDebtRepaymentOverLimit(item: PlannedOperationDto, debts: { id: string; amount: string }[]) {
+  const debt = debts.find((entry) => entry.id === item.targetDebtId);
+  if (!debt) return true;
+
+  const amount = Number(item.amount);
+  const debtAmount = Math.abs(Number(debt.amount));
+  if (!Number.isFinite(amount) || !Number.isFinite(debtAmount) || amount <= 0) return true;
+
+  return amount > debtAmount + 0.009;
+}
+
+function paymentWord(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "платёж";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "платежа";
+  return "платежей";
 }
 
 function planDate(value: string) {

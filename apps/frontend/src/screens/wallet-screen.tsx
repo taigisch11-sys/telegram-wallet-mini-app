@@ -1,5 +1,5 @@
 import type { AccountDto, DashboardStateDto, DebtDto } from "@wallet/shared";
-import { Banknote, Check, ChevronRight, CreditCard, Landmark, Pencil, TrendingUp, X } from "lucide-react";
+import { Banknote, BookOpen, Check, ChevronRight, CreditCard, FlaskConical, Landmark, Pencil, TrendingUp, X } from "lucide-react";
 import { useState } from "react";
 import type { Screen } from "../app/App";
 import { AmountInput } from "../components/common/amount-input";
@@ -13,10 +13,26 @@ import { api } from "../lib/api";
 import { money } from "../lib/format";
 import { recalculateLocalState } from "../lib/local-finance";
 
-export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof useWalletState>; onNavigate: (screen: Screen) => void }) {
+type WalletState = Omit<ReturnType<typeof useWalletState>, "remoteAvailable"> & { remoteAvailable?: boolean };
+
+export function WalletScreen({
+  wallet,
+  onNavigate,
+  onStartDemo,
+  onStartLearning,
+  demoMode = false
+}: {
+  wallet: WalletState;
+  onNavigate: (screen: Screen) => void;
+  onStartDemo?: () => void;
+  onStartLearning?: () => void;
+  demoMode?: boolean;
+}) {
   const state = wallet.data;
   const topAccounts = state.accounts.slice(0, 3);
   const topDebts = state.debts.slice(0, 2);
+  const showFirstRun = !demoMode && state.accounts.length === 0 && state.debts.length === 0 && state.income.length === 0 && state.payments.length === 0 && state.plannedOperations.length === 0;
+  const localOnly = demoMode || wallet.remoteAvailable !== true;
   const [editingAccount, setEditingAccount] = useState<{ id: string; balance: string } | null>(null);
   const [savingAccountId, setSavingAccountId] = useState<string | null>(null);
 
@@ -27,6 +43,13 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
     const nextAccounts = state.accounts.map((account) => (account.id === id ? { ...account, balance } : account));
     const editedBalance = calculateNetBalance(nextAccounts, state.debts);
     setSavingAccountId(id);
+
+    if (localOnly) {
+      wallet.setData((current) => applyQuickAccountCorrection(current, id, balance));
+      setSavingAccountId(null);
+      setEditingAccount(null);
+      return;
+    }
 
     try {
       await api.reconcile({
@@ -55,7 +78,9 @@ export function WalletScreen({ wallet, onNavigate }: { wallet: ReturnType<typeof
         onNavigate={onNavigate}
       />
 
-      <section className="space-y-3 pb-24">
+      {showFirstRun ? <FirstRunSetup onNavigate={onNavigate} onStartDemo={onStartDemo} onStartLearning={onStartLearning} /> : null}
+
+      <section className="space-y-3">
         <WalletAssetRow
           title="Счета"
           subtitle={state.accounts.length ? `${state.accounts.length} активных` : "Добавьте карту, вклад или наличные"}
@@ -128,6 +153,59 @@ function WalletAssetRow({
       <div className="flex-none text-right">
         <p className="text-[18px] font-bold text-white">{amount}</p>
       </div>
+    </button>
+  );
+}
+
+function FirstRunSetup({
+  onNavigate,
+  onStartDemo,
+  onStartLearning
+}: {
+  onNavigate: (screen: Screen) => void;
+  onStartDemo?: () => void;
+  onStartLearning?: () => void;
+}) {
+  return (
+    <section className="rounded-[30px] border border-action/25 bg-[linear-gradient(160deg,rgba(47,140,255,0.18),rgba(36,36,40,0.96)_48%,rgba(50,209,120,0.12))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+      <div className="flex items-start gap-3">
+        <div className="wallet-token wallet-token--action h-12 w-12">
+          <CreditCard size={24} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[21px] font-extrabold tracking-[-0.03em] text-white">Быстрый старт</p>
+          <p className="mt-1 text-sm font-semibold leading-5 text-[#b4b4ba]">Сначала добавьте реальные остатки, затем ближайшие платежи. Так приложение покажет свободные деньги без ручного ввода каждой траты.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <FirstRunStep index="1" title="Добавьте первый счёт" text="Карта, вклад или наличные, с которых вы реально тратите." onClick={() => onNavigate("accounts")} />
+        <FirstRunStep index="2" title="Укажите долги" text="Кредитка, кредит или рассрочка вводятся положительной суммой." onClick={() => onNavigate("accounts")} />
+        <FirstRunStep index="3" title="Запланируйте платежи" text="Аренда, кредит, связь и другие обязательные списания." onClick={() => onNavigate("plan")} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button className="flex min-h-12 items-center justify-center gap-2 rounded-[20px] bg-action px-3 text-sm font-extrabold text-white" type="button" onClick={onStartDemo}>
+          <FlaskConical size={18} />
+          Посмотреть демо
+        </button>
+        <button className="flex min-h-12 items-center justify-center gap-2 rounded-[20px] bg-white/10 px-3 text-sm font-extrabold text-white" type="button" onClick={onStartLearning}>
+          <BookOpen size={18} />
+          Обучение
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function FirstRunStep({ index, title, text, onClick }: { index: string; title: string; text: string; onClick: () => void }) {
+  return (
+    <button className="flex items-center gap-3 rounded-[22px] bg-black/18 p-3 text-left transition hover:bg-white/8" type="button" onClick={onClick}>
+      <span className="grid h-8 w-8 flex-none place-items-center rounded-full bg-action/15 text-sm font-extrabold text-action">{index}</span>
+      <span className="min-w-0">
+        <span className="block text-[15px] font-extrabold text-white">{title}</span>
+        <span className="block text-[12px] font-semibold leading-4 text-[#9f9fa6]">{text}</span>
+      </span>
     </button>
   );
 }

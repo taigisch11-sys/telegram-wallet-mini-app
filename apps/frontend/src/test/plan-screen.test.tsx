@@ -54,7 +54,7 @@ describe("PlanScreen", () => {
     fireEvent.change(screen.getByLabelText("Сумма платежа"), { target: { value: "15485" } });
     fireEvent.change(screen.getByLabelText("Добавить платёж: дата"), { target: { value: "2026-05-22" } });
 
-    fireEvent.click(screen.getByText("Создать график"));
+    fireEvent.click(screen.getByText("Размножить платежи"));
     fireEvent.change(screen.getByLabelText("Количество платежей"), { target: { value: "11" } });
     fireEvent.click(screen.getByLabelText("Последний платёж отличается"));
     fireEvent.change(screen.getByLabelText("Последний платёж"), { target: { value: "12500" } });
@@ -119,5 +119,104 @@ describe("PlanScreen", () => {
     await waitFor(() => {
       expect(screen.queryByText("Погашение кредитки")).not.toBeInTheDocument();
     });
+  });
+
+  it("creates a debt repayment schedule with a different final payment", async () => {
+    render(
+      <PlanHarness
+        initialState={{
+          ...emptyState,
+          accounts: [{ id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() }],
+          debts: [{ id: "credit-card", name: "Кредитка", amount: "-30000.00", createdAt: new Date().toISOString() }]
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Название погашения"), { target: { value: "График кредитки" } });
+    fireEvent.change(screen.getByLabelText("Сумма погашения"), { target: { value: "10000" } });
+    fireEvent.change(screen.getByLabelText("Дата погашения"), { target: { value: "2026-05-22" } });
+    fireEvent.click(screen.getAllByText("Размножить платежи")[1]);
+    fireEvent.change(screen.getByLabelText("Количество платежей"), { target: { value: "3" } });
+    fireEvent.click(screen.getByLabelText("Последний платёж отличается"));
+    fireEvent.change(screen.getByLabelText("Последний платёж"), { target: { value: "5000" } });
+    fireEvent.click(screen.getByLabelText("Добавить погашение долга"));
+
+    expect(await screen.findAllByText("График кредитки")).toHaveLength(3);
+    expect(screen.getAllByText("10 000 ₽")).toHaveLength(2);
+    expect(screen.getByText("5 000 ₽")).toBeInTheDocument();
+    expect(screen.getByText(/22\.07\.2026/)).toBeInTheDocument();
+  });
+
+  it("blocks a debt repayment that is larger than the selected debt", async () => {
+    render(
+      <PlanHarness
+        initialState={{
+          ...emptyState,
+          accounts: [{ id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() }],
+          debts: [{ id: "credit-card", name: "Кредитка", amount: "-8000.00", createdAt: new Date().toISOString() }]
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Название погашения"), { target: { value: "Переплата кредитки" } });
+    fireEvent.change(screen.getByLabelText("Сумма погашения"), { target: { value: "10000" } });
+
+    expect(screen.getByText("Сумма больше текущего долга. Уменьшите платёж или обновите остаток долга.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Добавить погашение долга")).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Добавить погашение долга"));
+    expect(screen.queryByText("Переплата кредитки")).not.toBeInTheDocument();
+  });
+
+  it("blocks completing a stale planned repayment after the debt became smaller", async () => {
+    render(
+      <PlanHarness
+        initialState={{
+          ...emptyState,
+          accounts: [{ id: "main-card", name: "Основная карта", balance: "50000.00", createdAt: new Date().toISOString() }],
+          debts: [{ id: "credit-card", name: "Кредитка", amount: "-8000.00", createdAt: new Date().toISOString() }],
+          plannedOperations: [
+            {
+              id: "repayment-overpay",
+              kind: "debt_repayment",
+              name: "Старое погашение",
+              amount: "10000.00",
+              plannedDate: new Date().toISOString(),
+              expectedDate: null,
+              actualDate: null,
+              effectiveDate: new Date().toISOString(),
+              status: "planned",
+              note: null,
+              sourceAccountId: "main-card",
+              targetAccountId: null,
+              targetDebtId: "credit-card",
+              seriesId: null
+            }
+          ]
+        }}
+      />
+    );
+
+    expect(screen.getByText("Старое погашение")).toBeInTheDocument();
+    expect(screen.getByText("Сумма погашения больше текущего долга")).toBeInTheDocument();
+    expect(screen.getByLabelText("Погашение выполнено")).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Погашение выполнено"));
+    expect(screen.getByText("-8 000 ₽")).toBeInTheDocument();
+  });
+
+  it("limits monthly payment schedules to 120 payments", async () => {
+    render(<PlanHarness />);
+
+    fireEvent.change(screen.getByLabelText("Название платежа"), { target: { value: "Длинный график" } });
+    fireEvent.change(screen.getByLabelText("Сумма платежа"), { target: { value: "1000" } });
+    fireEvent.click(screen.getByText("Размножить платежи"));
+    fireEvent.change(screen.getByLabelText("Количество платежей"), { target: { value: "121" } });
+
+    expect(screen.getByText("Можно создать не больше 120 платежей за раз.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Добавить платёж")).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("Добавить платёж"));
+    expect(screen.queryByText("Длинный график")).not.toBeInTheDocument();
   });
 });

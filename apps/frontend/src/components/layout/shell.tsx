@@ -79,7 +79,7 @@ export function Shell({ active, onNavigate, children }: { active: Screen; onNavi
         <div className="grid grid-cols-5 gap-1">
           {items.map((item) => {
             const Icon = item.icon;
-            const selected = active === item.id;
+            const selected = active === item.id || (active === "history" && item.id === "menu");
             return (
               <button
                 key={item.id}

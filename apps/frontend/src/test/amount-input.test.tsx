@@ -9,6 +9,12 @@ function AmountHarness({ initialValue = "0.00" }: { initialValue?: string }) {
   return <AmountInput label="Сумма" value={value} onChange={setValue} helper="Тестовое денежное поле" />;
 }
 
+function DebtAmountHarness() {
+  const [value, setValue] = useState("0.00");
+
+  return <AmountInput label="Сумма долга" value={value} onChange={setValue} tone="danger" />;
+}
+
 describe("AmountInput", () => {
   it("opens a calculator and replaces the default zero while typing", () => {
     render(<AmountHarness />);
@@ -54,5 +60,31 @@ describe("AmountInput", () => {
 
     expect(screen.getByRole("button", { name: /14.*₽/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Сумма")).toHaveValue("14.00");
+  });
+
+  it("closes on Escape without applying and returns focus to the trigger", () => {
+    render(<AmountHarness />);
+    const trigger = screen.getByRole("button", { name: /Сумма/ });
+
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "9" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Калькулятор" }), { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Калькулятор" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Сумма")).toHaveValue("0.00");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("uses an editing affordance and keeps the apply button non-destructive for debt amounts", () => {
+    render(<DebtAmountHarness />);
+
+    const trigger = screen.getByRole("button", { name: /Сумма долга/ });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("button", { name: "Готово" })).toHaveClass("bg-action");
+    expect(screen.queryByTestId("amount-input-plus-icon")).not.toBeInTheDocument();
   });
 });

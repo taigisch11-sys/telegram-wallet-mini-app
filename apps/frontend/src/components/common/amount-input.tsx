@@ -1,5 +1,5 @@
-import { ChevronLeft, Delete, Plus, X } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { Calculator, ChevronLeft, Delete, X } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { money } from "../../lib/format";
 
 type AmountTone = "action" | "positive" | "danger" | "warning" | "neutral";
@@ -40,6 +40,9 @@ export function AmountInput({
   className = ""
 }: AmountInputProps) {
   const id = useId();
+  const dialogId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -48,10 +51,19 @@ export function AmountInput({
   const displayDraft = draft.trim() ? draft : "0";
   const resultPreview = useMemo(() => formatPreview(evaluateExpression(displayDraft)), [displayDraft]);
 
+  useEffect(() => {
+    if (open) dialogRef.current?.focus();
+  }, [open]);
+
   function openCalculator() {
     setDraft(Number(numericValue) === 0 ? "" : trimMoney(numericValue));
     setError("");
     setOpen(true);
+  }
+
+  function closeCalculator() {
+    setOpen(false);
+    triggerRef.current?.focus();
   }
 
   function appendToken(token: string) {
@@ -89,7 +101,7 @@ export function AmountInput({
 
     const nextValue = allowNegative ? result : Math.abs(result);
     onChange(nextValue.toFixed(2));
-    setOpen(false);
+    closeCalculator();
   }
 
   return (
@@ -109,15 +121,20 @@ export function AmountInput({
         aria-label={label}
         className="sr-only"
         inputMode="decimal"
+        tabIndex={-1}
         value={value}
         onChange={(event) => onChange(normalizeMoney(event.target.value))}
       />
       <button
+        ref={triggerRef}
         className={`mt-1 flex w-full items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-[#1b1b1f] text-left outline-none transition focus:border-action ${
           compact ? "px-3 py-2" : "px-4 py-3"
         }`}
         type="button"
         aria-label={`${label}: ${displayValue}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? dialogId : undefined}
         onClick={openCalculator}
       >
         <span className="min-w-0">
@@ -125,16 +142,22 @@ export function AmountInput({
           {helper ? <span className="mt-0.5 block text-[11px] font-semibold leading-4 text-slate-500">{helper}</span> : null}
         </span>
         <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-action/15 text-action">
-          <Plus size={18} strokeWidth={3} />
+          <Calculator size={18} strokeWidth={2.7} />
         </span>
       </button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-end bg-black/55 px-3" role="presentation">
           <section
+            id={dialogId}
+            ref={dialogRef}
             role="dialog"
             aria-label="Калькулятор"
             aria-modal="true"
+            tabIndex={-1}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeCalculator();
+            }}
             className="mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom))] w-full max-w-md rounded-t-[32px] border border-white/10 bg-[#1d1d20] p-4 shadow-[0_-24px_70px_rgba(0,0,0,0.62)]"
           >
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
@@ -143,7 +166,7 @@ export function AmountInput({
                 <h2 className="text-[24px] font-extrabold text-white">Калькулятор</h2>
                 <p className="mt-1 text-sm font-semibold text-slate-400">{label}</p>
               </div>
-              <button className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white" type="button" aria-label="Закрыть калькулятор" onClick={() => setOpen(false)}>
+              <button className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white" type="button" aria-label="Закрыть калькулятор" onClick={closeCalculator}>
                 <X size={18} />
               </button>
             </div>
@@ -185,12 +208,12 @@ export function AmountInput({
               <button className="min-h-[56px] rounded-[18px] bg-action/15 text-[24px] font-extrabold text-action" type="button" aria-label="=" onClick={calculate}>
                 =
               </button>
-              <button className="min-h-[56px] rounded-[18px] bg-[#34343a] text-white" type="button" aria-label="Вернуться" onClick={() => setOpen(false)}>
+              <button className="min-h-[56px] rounded-[18px] bg-[#34343a] text-white" type="button" aria-label="Вернуться" onClick={closeCalculator}>
                 <ChevronLeft className="mx-auto" size={24} />
               </button>
             </div>
 
-            <button className={`mt-3 flex min-h-[58px] w-full items-center justify-center rounded-[22px] text-[18px] font-extrabold text-white ${toneButtonClass(tone)}`} type="button" onClick={apply}>
+            <button className="mt-3 flex min-h-[58px] w-full items-center justify-center rounded-[22px] bg-action text-[18px] font-extrabold text-white" type="button" onClick={apply}>
               {applyLabel}
             </button>
           </section>
@@ -300,11 +323,4 @@ function toneTextClass(tone: AmountTone) {
   if (tone === "warning") return "text-amber";
   if (tone === "neutral") return "text-white";
   return "text-action";
-}
-
-function toneButtonClass(tone: AmountTone) {
-  if (tone === "positive") return "bg-positive text-[#07160f]";
-  if (tone === "danger") return "bg-danger";
-  if (tone === "warning") return "bg-amber text-[#1b1b1d]";
-  return "bg-action";
 }

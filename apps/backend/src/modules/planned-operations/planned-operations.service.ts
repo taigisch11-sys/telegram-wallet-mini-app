@@ -1,5 +1,5 @@
 import { generateMonthlySchedule, plannedOperationInputSchema, plannedOperationSeriesInputSchema } from "@wallet/shared";
-import { notFound } from "../../lib/errors";
+import { badRequest, notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { mapPlannedOperation } from "../finance/finance-mappers";
 
@@ -9,6 +9,7 @@ export async function listPlannedOperations(userId: string) {
 
 export async function createPlannedOperation(userId: string, body: unknown) {
   const input = plannedOperationInputSchema.parse(body);
+  await validateDebtRepaymentPlan(userId, input);
   const operation = await prisma.plannedOperation.create({
     data: {
       userId,
@@ -33,6 +34,8 @@ export async function createPlannedOperation(userId: string, body: unknown) {
 export async function createPlannedOperationSeries(userId: string, body: unknown) {
   const input = plannedOperationSeriesInputSchema.parse(body);
   const schedule = generateMonthlySchedule({ startDate: input.startDate, count: input.count, amount: input.amount, finalAmount: input.finalAmount });
+  const totalAmount = schedule.reduce((sum, item) => sum + Number(item.amount), 0).toFixed(2);
+  await validateDebtRepaymentPlan(userId, input, totalAmount);
 
   const rows = await prisma.$transaction(async (tx) => {
     const series = await tx.operationSeries.create({
@@ -80,6 +83,17 @@ export async function markPlannedOperationDone(userId: string, id: string, actua
     if (planned.status === "done") return planned;
 
     const amount = Number(planned.amount);
+    if (planned.kind === "debt_repayment") {
+      assertDebtRepaymentTargets(planned.sourceAccountId, planned.targetDebtId);
+      const [sourceAccount, targetDebt] = await Promise.all([
+        tx.account.findFirst({ where: { id: planned.sourceAccountId ?? "", userId }, select: { id: true } }),
+        tx.debt.findFirst({ where: { id: planned.targetDebtId ?? "", userId }, select: { amount: true } })
+      ]);
+      if (!sourceAccount) throw notFound("Account not found for planned operation");
+      if (!targetDebt) throw notFound("Debt not found for planned operation");
+      assertDebtRepaymentDoesNotOverpay(String(planned.amount), String(targetDebt.amount));
+    }
+
     const entries: { targetType: "account" | "debt"; targetId: string; amount: string }[] = [];
     if ((planned.kind === "expense" || planned.kind === "debt_repayment" || planned.kind === "transfer") && planned.sourceAccountId) {
       entries.push({ targetType: "account", targetId: planned.sourceAccountId, amount: (-amount).toFixed(2) });
@@ -111,8 +125,12 @@ export async function markPlannedOperationDone(userId: string, id: string, actua
         const updatedAccounts = await tx.account.updateMany({ where: { id: entry.targetId, userId }, data: { balance: { increment: entry.amount } } });
         if (updatedAccounts.count !== 1) throw notFound("Account not found for planned operation");
       } else {
-        const updatedDebts = await tx.debt.updateMany({ where: { id: entry.targetId, userId }, data: { amount: { increment: entry.amount } } });
-        if (updatedDebts.count !== 1) throw notFound("Debt not found for planned operation");
+        const entryAmount = Number(entry.amount);
+        const updatedDebts = await tx.debt.updateMany({
+          where: { id: entry.targetId, userId, amount: { lte: (-entryAmount).toFixed(2) } },
+          data: { amount: { increment: entry.amount } }
+        });
+        if (updatedDebts.count !== 1) throw badRequest("Сумма погашения больше текущего долга", "debt_repayment_exceeds_debt");
       }
     }
 
@@ -128,4 +146,34 @@ export async function deletePlannedOperation(userId: string, id: string) {
   await prisma.plannedOperation.deleteMany({ where: { id, userId } });
   await prisma.history.create({ data: { userId, type: "planned_operation_deleted", payload: { id } } });
   return { ok: true };
+}
+
+export function assertDebtRepaymentDoesNotOverpay(amountInput: string | number, debtAmountInput: string | number) {
+  const amount = Number(amountInput);
+  const debtAmount = Math.abs(Number(debtAmountInput));
+  if (!Number.isFinite(amount) || amount <= 0) throw badRequest("Сумма погашения должна быть больше нуля", "invalid_debt_repayment_amount");
+  if (!Number.isFinite(debtAmount)) throw badRequest("Некорректный остаток долга", "invalid_debt_amount");
+  if (amount > debtAmount + 0.009) throw badRequest("Сумма погашения больше текущего долга", "debt_repayment_exceeds_debt");
+}
+
+function assertDebtRepaymentTargets(sourceAccountId: string | null | undefined, targetDebtId: string | null | undefined) {
+  if (!sourceAccountId || !targetDebtId) throw badRequest("Для погашения долга нужны счёт списания и долговой счёт", "invalid_debt_repayment_targets");
+}
+
+async function validateDebtRepaymentPlan(
+  userId: string,
+  input: { kind: string; amount: string; sourceAccountId?: string | null; targetDebtId?: string | null },
+  totalAmount = input.amount
+) {
+  if (input.kind !== "debt_repayment") return;
+  assertDebtRepaymentTargets(input.sourceAccountId, input.targetDebtId);
+
+  const [sourceAccount, targetDebt] = await Promise.all([
+    prisma.account.findFirst({ where: { id: input.sourceAccountId ?? "", userId }, select: { id: true } }),
+    prisma.debt.findFirst({ where: { id: input.targetDebtId ?? "", userId }, select: { amount: true } })
+  ]);
+  if (!sourceAccount) throw notFound("Account not found for planned operation");
+  if (!targetDebt) throw notFound("Debt not found for planned operation");
+
+  assertDebtRepaymentDoesNotOverpay(totalAmount, String(targetDebt.amount));
 }

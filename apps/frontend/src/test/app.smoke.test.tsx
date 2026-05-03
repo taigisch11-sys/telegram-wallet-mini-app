@@ -9,6 +9,14 @@ describe("App", () => {
     expect(screen.getAllByText("Графики").length).toBeGreaterThan(0);
   });
 
+  it("gives a new user a first-run setup route instead of only zero balances", () => {
+    render(<App />);
+
+    expect(screen.getByText("Быстрый старт")).toBeInTheDocument();
+    expect(screen.getByText("Добавьте первый счёт")).toBeInTheDocument();
+    expect(screen.getByText("Посмотреть демо")).toBeInTheDocument();
+  });
+
   it("uses a finance toolbar instead of duplicated Telegram chrome", () => {
     render(<App />);
 
@@ -39,6 +47,15 @@ describe("App", () => {
 
     fireEvent.click(screen.getByLabelText("Меню"));
     expect(screen.getByRole("heading", { name: "Меню" })).toBeInTheDocument();
+  });
+
+  it("keeps the menu tab active when history is open from the menu", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByLabelText("Меню"));
+    fireEvent.click(screen.getByRole("button", { name: "История" }));
+
+    expect(screen.getByLabelText("Меню")).toHaveClass("wallet-nav-item--active");
   });
 
   it("does not render duplicate Telegram chrome inside Telegram WebApp", () => {

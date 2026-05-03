@@ -7,7 +7,9 @@ import { api } from "../lib/api";
 import { money } from "../lib/format";
 import { recalculateLocalState } from "../lib/local-finance";
 
-export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWalletState> }) {
+type WalletState = Omit<ReturnType<typeof useWalletState>, "remoteAvailable"> & { remoteAvailable?: boolean };
+
+export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletState; demoMode?: boolean }) {
   const [accounts, setAccounts] = useState(() => wallet.data.accounts.map((item) => ({ id: item.id, balance: item.balance })));
   const [debts, setDebts] = useState(() => wallet.data.debts.map((item) => ({ id: item.id, amount: item.amount })));
   const [editedBalance, setEditedBalance] = useState(wallet.data.settings.editedBalance ?? wallet.data.balances.currentBalance);
@@ -18,6 +20,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
   const draftNetBalance = calculateDraftNetBalance(accounts, debts);
   const currentNetBalance = Number(wallet.data.balances.netBalance);
   const reconcileDifference = draftNetBalance - currentNetBalance;
+  const localOnly = demoMode || wallet.remoteAvailable !== true;
 
   useEffect(() => {
     setAccounts(wallet.data.accounts.map((item) => ({ id: item.id, balance: item.balance })));
@@ -36,11 +39,15 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
       createdAt: new Date().toISOString()
     };
 
-    try {
-      await api.createAccount({ name, balance: account.balance });
-      await wallet.refresh();
-    } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, accounts: [...current.accounts, account] }));
+    if (localOnly) {
+      applyLocalCreateAccount(account);
+    } else {
+      try {
+        await api.createAccount({ name, balance: account.balance });
+        await wallet.refresh();
+      } catch {
+        applyLocalCreateAccount(account);
+      }
     }
 
     setNewAccountName("");
@@ -58,11 +65,15 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
       createdAt: new Date().toISOString()
     };
 
-    try {
-      await api.createDebt({ name, amount: debt.amount });
-      await wallet.refresh();
-    } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, debts: [...current.debts, debt] }));
+    if (localOnly) {
+      applyLocalCreateDebt(debt);
+    } else {
+      try {
+        await api.createDebt({ name, amount: debt.amount });
+        await wallet.refresh();
+      } catch {
+        applyLocalCreateDebt(debt);
+      }
     }
 
     setNewDebtName("");
@@ -70,46 +81,81 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
   }
 
   async function deleteAccount(id: string) {
+    if (localOnly) {
+      applyLocalDeleteAccount(id);
+      return;
+    }
+
     try {
       await api.deleteAccount(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, accounts: current.accounts.filter((account) => account.id !== id) }));
+      applyLocalDeleteAccount(id);
     }
   }
 
   async function deleteDebt(id: string) {
+    if (localOnly) {
+      applyLocalDeleteDebt(id);
+      return;
+    }
+
     try {
       await api.deleteDebt(id);
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => recalculateLocalState({ ...current, debts: current.debts.filter((debt) => debt.id !== id) }));
+      applyLocalDeleteDebt(id);
     }
   }
 
   async function reconcile() {
+    if (localOnly) {
+      applyLocalReconcile();
+      return;
+    }
+
     try {
       await api.reconcile({ accounts, debts, editedBalance });
       await wallet.refresh();
     } catch {
-      wallet.setData((current) => {
-        const nextAccounts = current.accounts.map((account) => ({
-          ...account,
-          balance: normalizeMoney(accounts.find((item) => item.id === account.id)?.balance ?? account.balance)
-        }));
-        const nextDebts = current.debts.map((debt) => ({
-          ...debt,
-          amount: normalizeMoney(debts.find((item) => item.id === debt.id)?.amount ?? debt.amount)
-        }));
-
-        return recalculateLocalState({
-          ...current,
-          accounts: nextAccounts,
-          debts: nextDebts,
-          settings: { ...current.settings, editedBalance: normalizeMoney(editedBalance) }
-        });
-      });
+      applyLocalReconcile();
     }
+  }
+
+  function applyLocalCreateAccount(account: { id: string; name: string; balance: string; createdAt: string }) {
+    wallet.setData((current) => recalculateLocalState({ ...current, accounts: [...current.accounts, account] }));
+  }
+
+  function applyLocalCreateDebt(debt: { id: string; name: string; amount: string; createdAt: string }) {
+    wallet.setData((current) => recalculateLocalState({ ...current, debts: [...current.debts, debt] }));
+  }
+
+  function applyLocalDeleteAccount(id: string) {
+    wallet.setData((current) => recalculateLocalState({ ...current, accounts: current.accounts.filter((account) => account.id !== id) }));
+  }
+
+  function applyLocalDeleteDebt(id: string) {
+    wallet.setData((current) => recalculateLocalState({ ...current, debts: current.debts.filter((debt) => debt.id !== id) }));
+  }
+
+  function applyLocalReconcile() {
+    wallet.setData((current) => {
+      const nextAccounts = current.accounts.map((account) => ({
+        ...account,
+        balance: normalizeMoney(accounts.find((item) => item.id === account.id)?.balance ?? account.balance)
+      }));
+      const nextDebts = current.debts.map((debt) => ({
+        ...debt,
+        amount: normalizeMoney(debts.find((item) => item.id === debt.id)?.amount ?? debt.amount)
+      }));
+
+      return recalculateLocalState({
+        ...current,
+        accounts: nextAccounts,
+        debts: nextDebts,
+        settings: { ...current.settings, editedBalance: normalizeMoney(editedBalance) }
+      });
+    });
   }
 
   return (

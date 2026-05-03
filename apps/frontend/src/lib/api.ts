@@ -3,17 +3,32 @@ import { getTelegramInitData } from "./telegram";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 const TOKEN_KEY = "wallet_jwt";
+const REQUEST_TIMEOUT_MS = 12000;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers
+      }
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Сервер не ответил вовремя. Можно продолжить локально или открыть демо.");
     }
-  });
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
@@ -54,6 +69,17 @@ export const api = {
   markPayment: (id: string) => request(`/api/payments/${id}/mark-paid`, { method: "PATCH", body: JSON.stringify({}) }),
   createPlannedOperation: (body: Partial<PlannedOperationDto>) => request("/api/planned-operations", { method: "POST", body: JSON.stringify(body) }),
   markPlannedOperation: (id: string) => request(`/api/planned-operations/${id}/mark-done`, { method: "PATCH", body: JSON.stringify({}) }),
+  createPlannedOperationSeries: (body: {
+    kind: string;
+    name: string;
+    amount: string;
+    startDate: string;
+    count: number;
+    finalAmount?: string;
+    sourceAccountId?: string | null;
+    targetAccountId?: string | null;
+    targetDebtId?: string | null;
+  }) => request("/api/planned-operations/series", { method: "POST", body: JSON.stringify(body) }),
   deletePlannedOperation: (id: string) => request(`/api/planned-operations/${id}`, { method: "DELETE" }),
   reconcile: (body: unknown) => request("/api/accounts/reconcile", { method: "POST", body: JSON.stringify(body) })
 };
