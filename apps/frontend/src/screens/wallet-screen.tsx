@@ -2,6 +2,7 @@ import type { AccountDto, DashboardStateDto, DebtDto } from "@wallet/shared";
 import { Banknote, Check, ChevronRight, CreditCard, Landmark, Pencil, TrendingUp, X } from "lucide-react";
 import { useState } from "react";
 import type { Screen } from "../app/App";
+import { AmountInput } from "../components/common/amount-input";
 import { AlertsPanel } from "../components/wallet/alerts-panel";
 import { BalanceHero } from "../components/wallet/balance-hero";
 import { FinanceTimeline } from "../components/wallet/finance-timeline";
@@ -165,17 +166,7 @@ function AccountRow({
           </div>
         </div>
         <div className="mt-3 grid grid-cols-[1fr_42px_42px] gap-2">
-          <input
-            aria-label={`Новый остаток ${account.name}`}
-            className="min-w-0 rounded-[16px] border border-white/10 bg-[#1b1b1f] px-3 py-2 text-right text-[17px] font-extrabold text-white outline-none focus:border-action"
-            inputMode="decimal"
-            value={editBalance}
-            onChange={(event) => onChangeEditBalance(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") onSave();
-              if (event.key === "Escape") onCancel();
-            }}
-          />
+          <AmountInput label={`Новый остаток ${account.name}`} value={editBalance} onChange={onChangeEditBalance} applyLabel="Применить" compact showLabel={false} />
           <button
             aria-label={`Сохранить счёт ${account.name}`}
             className="grid h-11 w-11 place-items-center rounded-[16px] bg-action text-white disabled:opacity-60"

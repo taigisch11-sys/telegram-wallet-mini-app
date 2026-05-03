@@ -31,7 +31,7 @@ describe("AccountsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Добавить счёт" }));
 
     expect(await screen.findByText("Карта")).toBeInTheDocument();
-    expect(screen.getByText("1 500 ₽")).toBeInTheDocument();
+    expect(screen.getAllByText("1 500 ₽").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Удалить счёт Карта"));
     await waitFor(() => {
@@ -49,7 +49,7 @@ describe("AccountsScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Добавить долговой счёт" }));
 
     expect(await screen.findByText("Кредитка")).toBeInTheDocument();
-    expect(screen.getByText("-25 000 ₽")).toBeInTheDocument();
+    expect(screen.getAllByText("-25 000 ₽").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Удалить долговой счёт Кредитка"));
     await waitFor(() => {

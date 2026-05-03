@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AmountInput } from "../components/common/amount-input";
 import { Card } from "../components/common/card";
 import { useWalletState } from "../hooks/use-state";
 import { api } from "../lib/api";
@@ -14,6 +15,9 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
   const [newAccountBalance, setNewAccountBalance] = useState("0.00");
   const [newDebtName, setNewDebtName] = useState("");
   const [newDebtAmount, setNewDebtAmount] = useState("0.00");
+  const draftNetBalance = calculateDraftNetBalance(accounts, debts);
+  const currentNetBalance = Number(wallet.data.balances.netBalance);
+  const reconcileDifference = draftNetBalance - currentNetBalance;
 
   useEffect(() => {
     setAccounts(wallet.data.accounts.map((item) => ({ id: item.id, balance: item.balance })));
@@ -111,6 +115,11 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
   return (
     <div className="space-y-3">
       <Card>
+        <div className="mb-3 grid grid-cols-3 gap-2">
+          <BalanceDeltaCard label="Сейчас" value={currentNetBalance} tone="neutral" />
+          <BalanceDeltaCard label="Станет" value={draftNetBalance} tone="action" />
+          <BalanceDeltaCard label="Разница" value={reconcileDifference} tone={reconcileDifference < 0 ? "danger" : reconcileDifference > 0 ? "positive" : "neutral"} />
+        </div>
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-extrabold">Счета</h2>
@@ -124,10 +133,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
             Название счёта
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Карта, вклад, наличные" value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} />
           </label>
-          <label className="block text-xs font-bold text-slate-400">
-            Остаток
-            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newAccountBalance} onChange={(event) => setNewAccountBalance(event.target.value)} />
-          </label>
+          <AmountInput label="Остаток" value={newAccountBalance} onChange={setNewAccountBalance} helper="Нажмите, чтобы ввести сумму" compact />
           <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addAccount()}>
             <Plus size={18} />
             Добавить счёт
@@ -137,15 +143,20 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
         <div className="space-y-2">
           {wallet.data.accounts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Счетов пока нет. Добавьте карту, вклад или наличные.</p> : null}
           {wallet.data.accounts.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_120px_38px] items-center gap-2 rounded-md border border-line p-3">
+            <div key={item.id} className="grid grid-cols-[1fr_132px_38px] items-center gap-2 rounded-md border border-line p-3">
               <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
-              <input
-                aria-label={`Остаток счёта ${item.name}`}
-                className="w-full rounded-md border border-line bg-ink px-3 py-2 text-right"
-                inputMode="decimal"
-                value={accounts.find((account) => account.id === item.id)?.balance ?? item.balance}
-                onChange={(event) => setAccounts((prev) => prev.map((account) => (account.id === item.id ? { ...account, balance: event.target.value } : account)))}
-              />
+              <div>
+                <AmountInput
+                  label={`Остаток счёта ${item.name}`}
+                  value={accounts.find((account) => account.id === item.id)?.balance ?? item.balance}
+                  onChange={(value) => setAccounts((prev) => prev.map((account) => (account.id === item.id ? { ...account, balance: value } : account)))}
+                  compact
+                  showLabel={false}
+                />
+                <p className={`mt-1 text-right text-[11px] font-bold ${diffToneClass(valueDifference(accounts.find((account) => account.id === item.id)?.balance ?? item.balance, item.balance))}`}>
+                  {diffLabel(valueDifference(accounts.find((account) => account.id === item.id)?.balance ?? item.balance, item.balance))}
+                </p>
+              </div>
               <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteAccount(item.id)} aria-label={`Удалить счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
@@ -172,10 +183,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
             Название долгового счёта
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Кредитка, кредит, рассрочка" value={newDebtName} onChange={(event) => setNewDebtName(event.target.value)} />
           </label>
-          <label className="block text-xs font-bold text-slate-400">
-            Сумма долга
-            <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={newDebtAmount} onChange={(event) => setNewDebtAmount(event.target.value)} />
-          </label>
+          <AmountInput label="Сумма долга" value={newDebtAmount} onChange={setNewDebtAmount} helper="Введите без минуса" tone="danger" compact />
           <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addDebt()}>
             <Plus size={18} />
             Добавить долговой счёт
@@ -185,15 +193,21 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
         <div className="space-y-2">
           {wallet.data.debts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.</p> : null}
           {wallet.data.debts.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_120px_38px] items-center gap-2 rounded-md border border-line p-3">
+            <div key={item.id} className="grid grid-cols-[1fr_132px_38px] items-center gap-2 rounded-md border border-line p-3">
               <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
-              <input
-                aria-label={`Остаток долгового счёта ${item.name}`}
-                className="w-full rounded-md border border-line bg-ink px-3 py-2 text-right"
-                inputMode="decimal"
-                value={debts.find((debt) => debt.id === item.id)?.amount ?? item.amount}
-                onChange={(event) => setDebts((prev) => prev.map((debt) => (debt.id === item.id ? { ...debt, amount: event.target.value } : debt)))}
-              />
+              <div>
+                <AmountInput
+                  label={`Остаток долгового счёта ${item.name}`}
+                  value={positiveMoney(debts.find((debt) => debt.id === item.id)?.amount ?? item.amount)}
+                  onChange={(value) => setDebts((prev) => prev.map((debt) => (debt.id === item.id ? { ...debt, amount: normalizeDebt(value) } : debt)))}
+                  tone="danger"
+                  compact
+                  showLabel={false}
+                />
+                <p className={`mt-1 text-right text-[11px] font-bold ${diffToneClass(valueDifference(debts.find((debt) => debt.id === item.id)?.amount ?? item.amount, item.amount))}`}>
+                  {diffLabel(valueDifference(debts.find((debt) => debt.id === item.id)?.amount ?? item.amount, item.amount))}
+                </p>
+              </div>
               <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteDebt(item.id)} aria-label={`Удалить долговой счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
@@ -203,10 +217,7 @@ export function AccountsScreen({ wallet }: { wallet: ReturnType<typeof useWallet
       </Card>
 
       <Card>
-        <label className="block text-sm font-bold text-slate-300">
-          Итог после корректировки
-          <input className="mt-2 w-full rounded-md border border-line bg-ink px-3 py-3 text-lg font-bold" inputMode="decimal" value={editedBalance} onChange={(event) => setEditedBalance(event.target.value)} />
-        </label>
+        <AmountInput label="Итог после корректировки" value={editedBalance} onChange={setEditedBalance} helper="Можно сверить общую чистую позицию" tone="warning" />
         <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white" type="button" onClick={() => void reconcile()}>
           <RefreshCw size={18} />
           Сохранить остатки
@@ -227,6 +238,41 @@ function normalizeDebt(value: string) {
   return amount === 0 ? "0.00" : `-${amount.toFixed(2)}`;
 }
 
+function positiveMoney(value: string) {
+  const parsed = Math.abs(Number(value));
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : "0.00";
+}
+
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `local-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function calculateDraftNetBalance(accounts: { balance: string }[], debts: { amount: string }[]) {
+  const accountBalance = accounts.reduce((sum, account) => sum + Number(account.balance || 0), 0);
+  const debtBalance = debts.reduce((sum, debt) => sum + Number(debt.amount || 0), 0);
+  return accountBalance + debtBalance;
+}
+
+function BalanceDeltaCard({ label, value, tone }: { label: string; value: number; tone: "action" | "positive" | "danger" | "neutral" }) {
+  return (
+    <div className="rounded-[18px] bg-[#202024] p-3">
+      <p className="text-[11px] font-bold text-slate-500">{label}</p>
+      <p className={`mt-1 text-sm font-extrabold ${tone === "action" ? "text-action" : tone === "positive" ? "text-positive" : tone === "danger" ? "text-danger" : "text-white"}`}>{money(value.toFixed(2))}</p>
+    </div>
+  );
+}
+
+function valueDifference(next: string, current: string) {
+  return Number(next || 0) - Number(current || 0);
+}
+
+function diffLabel(value: number) {
+  if (Math.abs(value) < 0.009) return "без изменений";
+  return `${value > 0 ? "+" : ""}${money(value.toFixed(2))}`;
+}
+
+function diffToneClass(value: number) {
+  if (value > 0.009) return "text-positive";
+  if (value < -0.009) return "text-danger";
+  return "text-slate-500";
 }

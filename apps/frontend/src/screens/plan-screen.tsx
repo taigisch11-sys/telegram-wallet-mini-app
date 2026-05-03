@@ -1,6 +1,7 @@
 import { applyOperationEntries, generateMonthlySchedule, type IncomeDto, type IncomeStatus, type PaymentDto, type PaymentStatus, type PlannedOperationDto } from "@wallet/shared";
 import { Check, Plus, Trash2, WalletCards } from "lucide-react";
 import { useState } from "react";
+import { AmountInput } from "../components/common/amount-input";
 import { Badge } from "../components/common/badge";
 import { Card } from "../components/common/card";
 import { useWalletState } from "../hooks/use-state";
@@ -34,6 +35,9 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
   const selectedRepaymentDebtId = repaymentTargetDebtId || wallet.data.debts[0]?.id || "";
   const selectedRepaymentAccount = wallet.data.accounts.find((account) => account.id === selectedRepaymentAccountId) ?? wallet.data.accounts[0];
   const selectedRepaymentDebt = wallet.data.debts.find((debt) => debt.id === selectedRepaymentDebtId) ?? wallet.data.debts[0];
+  const repaymentPreviewAmount = Number(repaymentAmount || 0);
+  const repaymentDebtAfter = selectedRepaymentDebt ? Number(selectedRepaymentDebt.amount) + repaymentPreviewAmount : 0;
+  const repaymentExceedsDebt = selectedRepaymentDebt ? repaymentPreviewAmount > Math.abs(Number(selectedRepaymentDebt.amount)) : false;
 
   async function addIncome() {
     const name = incomeName.trim();
@@ -352,11 +356,20 @@ export function PlanScreen({ wallet }: { wallet: ReturnType<typeof useWalletStat
             </div>
             <div className="grid grid-cols-[1fr_104px_42px] gap-2">
               <input aria-label="Название погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2" placeholder="Погашение кредитки" value={repaymentName} onChange={(event) => setRepaymentName(event.target.value)} />
-              <input aria-label="Сумма погашения" className="min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right" inputMode="decimal" value={repaymentAmount} onChange={(event) => setRepaymentAmount(event.target.value)} />
+              <AmountInput label="Сумма погашения" value={repaymentAmount} onChange={setRepaymentAmount} compact showLabel={false} />
               <button className="grid place-items-center rounded-md bg-action text-white" type="button" onClick={() => void addDebtRepayment()} aria-label="Добавить погашение долга">
                 <Plus size={18} />
               </button>
               <input className="col-span-3 rounded-md border border-line bg-ink px-3 py-2 text-sm" type="date" value={repaymentDate} onChange={(event) => setRepaymentDate(event.target.value)} aria-label="Дата погашения" />
+            </div>
+            <div className={`mt-3 rounded-[22px] border p-3 text-sm font-semibold ${repaymentExceedsDebt ? "border-amber/35 bg-amber/10 text-amber" : "border-action/25 bg-action/10 text-slate-200"}`}>
+              {repaymentExceedsDebt ? (
+                <span>Сумма больше текущего долга. Проверьте остаток перед добавлением.</span>
+              ) : (
+                <span>
+                  С {selectedRepaymentAccount.name} спишется {money(repaymentPreviewAmount.toFixed(2))}, долг станет {money(repaymentDebtAfter.toFixed(2))}.
+                </span>
+              )}
             </div>
           </>
         )}
@@ -401,15 +414,22 @@ function PlanForm({
         {nameLabel}
         <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Название" value={name} onChange={(event) => onName(event.target.value)} />
       </label>
-      <label className="block text-xs font-bold text-slate-400">
-        {amountLabel}
-        <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-right text-white" inputMode="decimal" value={amount} onChange={(event) => onAmount(event.target.value)} />
-      </label>
+      <div>
+        <p className="text-xs font-bold text-slate-400">{amountLabel}</p>
+        <AmountInput label={amountLabel} value={amount} onChange={onAmount} compact showLabel={false} />
+      </div>
       <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:mt-5 sm:w-11 sm:px-0" type="button" onClick={onSubmit} aria-label={actionLabel}>
         <Plus size={18} />
         <span className="sm:hidden">{actionLabel}</span>
       </button>
       <input className="rounded-md border border-line bg-ink px-3 py-2 text-sm sm:col-span-3" type="date" value={date} onChange={(event) => onDate(event.target.value)} aria-label={`${actionLabel}: дата`} />
+      <div className="flex flex-wrap gap-2 sm:col-span-3">
+        {quickDateOptions().map((item) => (
+          <button key={item.label} className="rounded-full bg-action/15 px-3 py-1.5 text-xs font-extrabold text-action" type="button" onClick={() => onDate(item.value)}>
+            {item.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -456,16 +476,10 @@ function ScheduleBuilder({
             Последний платёж отличается
           </label>
           {finalDiffers ? (
-            <label className="block text-xs font-bold text-slate-400">
-              Последний платёж
-              <input
-                aria-label="Последний платёж"
-                className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-right text-sm text-white"
-                inputMode="decimal"
-                value={finalAmount}
-                onChange={(event) => onFinalAmount(event.target.value)}
-              />
-            </label>
+            <div>
+              <p className="text-xs font-bold text-slate-400">Последний платёж</p>
+              <AmountInput label="Последний платёж" value={finalAmount} onChange={onFinalAmount} compact showLabel={false} />
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -538,6 +552,24 @@ function DebtRepaymentRow({ item, onDelete, onDone }: { item: PlannedOperationDt
 
 function planDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+}
+
+function quickDateOptions() {
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const salaryDay = new Date(now.getFullYear(), now.getMonth(), 25);
+  if (salaryDay < now) salaryDay.setMonth(salaryDay.getMonth() + 1);
+
+  return [
+    { label: "Сегодня", value: toDateInput(now) },
+    { label: "Завтра", value: toDateInput(tomorrow) },
+    { label: "25 число", value: toDateInput(salaryDay) }
+  ];
+}
+
+function toDateInput(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 function normalizeMoney(value: string) {
