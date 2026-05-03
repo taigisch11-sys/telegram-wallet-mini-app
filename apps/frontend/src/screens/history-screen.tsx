@@ -4,15 +4,19 @@ import { Card } from "../components/common/card";
 import { api } from "../lib/api";
 import { shortDate } from "../lib/format";
 
-export function HistoryScreen() {
-  const [items, setItems] = useState<HistoryItemDto[]>([]);
+export function HistoryScreen({ items: providedItems }: { items?: HistoryItemDto[] }) {
+  const [items, setItems] = useState<HistoryItemDto[]>(providedItems ?? []);
 
   useEffect(() => {
+    if (providedItems) {
+      setItems(providedItems);
+      return;
+    }
     void api
       .history()
       .then(setItems)
       .catch(() => setItems([]));
-  }, []);
+  }, [providedItems]);
 
   return (
     <Card>

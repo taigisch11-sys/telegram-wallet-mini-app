@@ -12,16 +12,20 @@ const periodLabels = {
   year: "Год"
 };
 
-export function ChartsScreen() {
+export function ChartsScreen({ demoData }: { demoData?: TimeseriesPointDto[] }) {
   const [period, setPeriod] = useState<(typeof periods)[number]>("month");
   const [data, setData] = useState<TimeseriesPointDto[]>([]);
 
   useEffect(() => {
+    if (demoData) {
+      setData(demoData);
+      return;
+    }
     void api
       .timeseries(period)
       .then(setData)
       .catch(() => setData([]));
-  }, [period]);
+  }, [demoData, period]);
 
   return (
     <div className="space-y-3">

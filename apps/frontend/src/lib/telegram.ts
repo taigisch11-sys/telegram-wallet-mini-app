@@ -24,3 +24,7 @@ export function getTelegramInitData() {
 export function closeTelegramApp() {
   window.Telegram?.WebApp?.close?.();
 }
+
+export function isTelegramWebApp() {
+  return Boolean(window.Telegram?.WebApp);
+}

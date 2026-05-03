@@ -19,7 +19,16 @@ describe("App", () => {
     fireEvent.click(screen.getAllByText("План")[0]);
     expect(screen.getByText("Доходы")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("Открыть историю"));
-    expect(screen.getByRole("heading", { name: "История" })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Меню"));
+    expect(screen.getByRole("heading", { name: "Меню" })).toBeInTheDocument();
+  });
+
+  it("does not render duplicate Telegram chrome inside Telegram WebApp", () => {
+    window.Telegram = { WebApp: { initData: "query_id=test", ready: () => {}, expand: () => {}, close: () => {}, MainButton: { hide: () => {} } } };
+
+    render(<App />);
+
+    expect(screen.queryByText("Закрыть")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Меню")).toBeInTheDocument();
   });
 });
