@@ -14,7 +14,7 @@
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "qa:base": "npm run lint --workspaces && npm run test --workspaces && npm run build --workspaces",
-    "qa:ai": "tsx scripts/ai-qa/run-suite.ts",
+    "qa:ai": "vitest run scripts/ai-qa/report-guard.test.ts && tsx scripts/ai-qa/run-suite.ts",
     "qa:ai:ux": "tsx scripts/ai-qa/run-agent.ts ux-critic",
     "qa:ai:finance": "tsx scripts/ai-qa/run-agent.ts financial-analyst",
     "qa:release": "npm run qa:base && npm run qa:ai && tsx scripts/ai-qa/check-release-report.ts",

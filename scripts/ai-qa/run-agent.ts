@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { collectProjectContext } from "./collect-project-context";
 import { callLmStudio, skippedReport, type AiQaReport } from "./lmstudio-client";
+import { sanitizeAiQaReportForRelease } from "./report-guard";
 
 export const roleNames = ["ux-critic", "qa-navigation", "copy-checker", "financial-analyst", "regression-guardian"] as const;
 export type RoleName = (typeof roleNames)[number];
@@ -13,7 +14,7 @@ export async function runAgent(role: RoleName): Promise<AiQaReport> {
   const context = collectProjectContext();
 
   try {
-    return await callLmStudio(role, rolePrompt, context);
+    return sanitizeAiQaReportForRelease(await callLmStudio(role, rolePrompt, context));
   } catch (error) {
     return skippedReport(role, error instanceof Error ? error.message : String(error));
   }
