@@ -158,7 +158,7 @@ export function AmountInput({
             onKeyDown={(event) => {
               if (event.key === "Escape") closeCalculator();
             }}
-            className="mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom))] w-full max-w-md rounded-t-[32px] border border-white/10 bg-[#1d1d20] p-4 shadow-[0_-24px_70px_rgba(0,0,0,0.62)]"
+            className="mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom))] max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-[32px] border border-white/10 bg-[#1d1d20] p-4 shadow-[0_-24px_70px_rgba(0,0,0,0.62)]"
           >
             <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
             <div className="mb-4 flex items-start justify-between gap-3">

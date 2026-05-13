@@ -1,5 +1,8 @@
 import { operationInputSchema } from "@wallet/shared";
+import type { Prisma } from "@prisma/client";
+import { badRequest } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { ensureCategoryBelongsToUser } from "../categories/categories.service";
 import { mapOperation } from "../finance/finance-mappers";
 
 export async function listOperations(userId: string) {
@@ -15,7 +18,9 @@ export async function listOperations(userId: string) {
 
 export async function createOperation(userId: string, body: unknown) {
   const input = operationInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(userId, input.categoryId);
   const operation = await prisma.$transaction(async (tx) => {
+    await validateOperationEntries(tx, userId, input.entries);
     const created = await tx.operation.create({
       data: {
         userId,
@@ -26,6 +31,7 @@ export async function createOperation(userId: string, body: unknown) {
         note: input.note ?? null,
         plannedOperationId: input.plannedOperationId ?? null,
         seriesId: input.seriesId ?? null,
+        categoryId: input.categoryId ?? null,
         entries: {
           create: input.entries.map((entry) => ({
             targetType: entry.targetType,
@@ -39,15 +45,17 @@ export async function createOperation(userId: string, body: unknown) {
 
     for (const entry of input.entries) {
       if (entry.targetType === "account") {
-        await tx.account.updateMany({
+        const updated = await tx.account.updateMany({
           where: { id: entry.targetId, userId },
           data: { balance: { increment: entry.amount } }
         });
+        if (updated.count !== 1) throw badRequest("Счёт операции не найден", "operation_account_not_found");
       } else {
-        await tx.debt.updateMany({
+        const updated = await tx.debt.updateMany({
           where: { id: entry.targetId, userId },
           data: { amount: { increment: entry.amount } }
         });
+        if (updated.count !== 1) throw badRequest("Долговой счёт операции не найден", "operation_debt_not_found");
       }
     }
 
@@ -57,3 +65,21 @@ export async function createOperation(userId: string, body: unknown) {
 
   return mapOperation(operation);
 }
+
+async function validateOperationEntries(
+  tx: PrismaTransaction,
+  userId: string,
+  entries: { targetType: "account" | "debt"; targetId: string }[]
+) {
+  for (const entry of entries) {
+    if (entry.targetType === "account") {
+      const account = await tx.account.findFirst({ where: { id: entry.targetId, userId }, select: { id: true } });
+      if (!account) throw badRequest("Счёт операции не найден", "operation_account_not_found");
+      continue;
+    }
+    const debt = await tx.debt.findFirst({ where: { id: entry.targetId, userId }, select: { id: true } });
+    if (!debt) throw badRequest("Долговой счёт операции не найден", "operation_debt_not_found");
+  }
+}
+
+type PrismaTransaction = Prisma.TransactionClient;

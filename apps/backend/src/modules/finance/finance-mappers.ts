@@ -1,4 +1,4 @@
-import type { Account, BalanceSnapshot, Debt, History, Income, Operation, OperationEntry, Payment, PlannedOperation, Settings, User } from "@prisma/client";
+import type { Account, BalanceSnapshot, Category, Debt, History, Income, Operation, OperationEntry, Payment, PlannedOperation, Settings, User } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 import { effectiveDate, iso, toMoney } from "./finance-utils";
 
@@ -30,6 +30,18 @@ export function mapDebt(debt: Debt) {
   };
 }
 
+export function mapCategory(category: Category) {
+  return {
+    id: category.id,
+    name: category.name,
+    type: category.type,
+    color: category.color,
+    icon: category.icon,
+    isDefault: category.isDefault,
+    createdAt: category.createdAt.toISOString()
+  };
+}
+
 export function mapIncome(income: Income) {
   const date = effectiveDate(income);
   return {
@@ -41,7 +53,8 @@ export function mapIncome(income: Income) {
     actualDate: iso(income.actualDate),
     effectiveDate: date.toISOString(),
     status: income.status,
-    note: income.note
+    note: income.note,
+    categoryId: income.categoryId
   };
 }
 
@@ -56,7 +69,8 @@ export function mapPayment(payment: Payment) {
     actualDate: iso(payment.actualDate),
     effectiveDate: date.toISOString(),
     status: payment.status,
-    note: payment.note
+    note: payment.note,
+    categoryId: payment.categoryId
   };
 }
 
@@ -71,6 +85,7 @@ export function mapOperation(operation: Operation & { entries: OperationEntry[] 
     plannedOperationId: operation.plannedOperationId,
     seriesId: operation.seriesId,
     createdAt: operation.createdAt.toISOString(),
+    categoryId: operation.categoryId,
     entries: operation.entries.map((entry) => ({
       id: entry.id,
       targetType: entry.targetType as "account" | "debt",
@@ -96,7 +111,8 @@ export function mapPlannedOperation(operation: PlannedOperation) {
     sourceAccountId: operation.sourceAccountId,
     targetAccountId: operation.targetAccountId,
     targetDebtId: operation.targetDebtId,
-    seriesId: operation.seriesId
+    seriesId: operation.seriesId,
+    categoryId: operation.categoryId
   };
 }
 

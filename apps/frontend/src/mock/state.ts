@@ -1,4 +1,4 @@
-import type { DashboardStateDto } from "@wallet/shared";
+import { DEFAULT_CATEGORIES, type DashboardStateDto } from "@wallet/shared";
 import type { HistoryItemDto, TimeseriesPointDto } from "@wallet/shared";
 import { recalculateLocalState } from "../lib/local-finance";
 
@@ -6,6 +6,19 @@ type DemoChartPeriod = "week" | "month" | "quarter" | "year";
 
 const now = new Date();
 const iso = (offsetDays: number) => new Date(now.getTime() + offsetDays * 24 * 60 * 60 * 1000).toISOString();
+const categoryCreatedAt = now.toISOString();
+export const mockCategories = DEFAULT_CATEGORIES.map((category) => ({
+  id: `category-${category.name.toLowerCase().replace(/\s+/g, "-")}`,
+  ...category,
+  createdAt: categoryCreatedAt
+}));
+
+export const mockCategoryId = {
+  income: mockCategories.find((category) => category.name === "Доход")?.id ?? null,
+  required: mockCategories.find((category) => category.name === "Обязательные")?.id ?? null,
+  credit: mockCategories.find((category) => category.name === "Кредиты")?.id ?? null,
+  unallocated: mockCategories.find((category) => category.name === "Нераспределено")?.id ?? null
+};
 
 export const emptyState: DashboardStateDto = {
   user: {
@@ -33,6 +46,7 @@ export const emptyState: DashboardStateDto = {
   upcoming: [],
   accounts: [],
   debts: [],
+  categories: mockCategories,
   income: [],
   payments: [],
   operations: [],
@@ -74,7 +88,8 @@ export const demoState: DashboardStateDto = recalculateLocalState({
       actualDate: iso(-2),
       effectiveDate: iso(-2),
       status: "received_on_time",
-      note: "Фиксированный доход уже получен"
+      note: "Фиксированный доход уже получен",
+      categoryId: mockCategoryId.income
     },
     {
       id: "demo-income-side",
@@ -85,7 +100,8 @@ export const demoState: DashboardStateDto = recalculateLocalState({
       actualDate: null,
       effectiveDate: iso(6),
       status: "planned",
-      note: null
+      note: null,
+      categoryId: mockCategoryId.income
     }
   ],
   payments: [
@@ -98,7 +114,8 @@ export const demoState: DashboardStateDto = recalculateLocalState({
       actualDate: null,
       effectiveDate: iso(3),
       status: "planned",
-      note: null
+      note: null,
+      categoryId: mockCategoryId.required
     },
     {
       id: "demo-payment-internet",
@@ -109,7 +126,8 @@ export const demoState: DashboardStateDto = recalculateLocalState({
       actualDate: iso(-1),
       effectiveDate: iso(-1),
       status: "paid_on_time",
-      note: null
+      note: null,
+      categoryId: mockCategoryId.required
     },
     {
       id: "demo-payment-credit",
@@ -120,7 +138,8 @@ export const demoState: DashboardStateDto = recalculateLocalState({
       actualDate: null,
       effectiveDate: iso(8),
       status: "planned",
-      note: null
+      note: null,
+      categoryId: mockCategoryId.credit
     }
   ],
   latestSnapshot: {

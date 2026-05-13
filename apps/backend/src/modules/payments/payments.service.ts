@@ -1,6 +1,7 @@
 import { OperationKind, PaymentStatus } from "@wallet/shared";
 import { notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { ensureCategoryBelongsToUser } from "../categories/categories.service";
 import { mapPayment } from "../finance/finance-mappers";
 
 export function resolvePaymentPaidStatus(effectiveDate: string | Date, actualDate: string | Date) {
@@ -12,6 +13,7 @@ export async function listPayments(userId: string) {
 }
 
 export async function createPayment(userId: string, data: any) {
+  await ensureCategoryBelongsToUser(userId, data.categoryId);
   const payment = await prisma.payment.create({
     data: {
       userId,
@@ -21,7 +23,8 @@ export async function createPayment(userId: string, data: any) {
       expectedDate: data.expectedDate ? new Date(data.expectedDate) : null,
       actualDate: data.actualDate ? new Date(data.actualDate) : null,
       status: data.status,
-      note: data.note ?? null
+      note: data.note ?? null,
+      categoryId: data.categoryId ?? null
     }
   });
   await prisma.history.create({ data: { userId, type: "payment_created", payload: { name: data.name, amount: data.amount } } });
@@ -30,13 +33,15 @@ export async function createPayment(userId: string, data: any) {
 
 export async function updatePayment(userId: string, id: string, data: any) {
   await ensurePayment(userId, id);
+  await ensureCategoryBelongsToUser(userId, data.categoryId);
   const payment = await prisma.payment.update({
     where: { id },
     data: {
       ...data,
       plannedDate: data.plannedDate ? new Date(data.plannedDate) : undefined,
       expectedDate: data.expectedDate === undefined ? undefined : data.expectedDate ? new Date(data.expectedDate) : null,
-      actualDate: data.actualDate === undefined ? undefined : data.actualDate ? new Date(data.actualDate) : null
+      actualDate: data.actualDate === undefined ? undefined : data.actualDate ? new Date(data.actualDate) : null,
+      categoryId: data.categoryId === undefined ? undefined : data.categoryId ?? null
     }
   });
   await prisma.history.create({ data: { userId, type: "payment_updated", payload: { id, ...data } } });
@@ -57,7 +62,8 @@ export async function markPaymentPaid(userId: string, id: string, actualDateInpu
         name: updated.name,
         amount: updated.amount,
         operationDate: actualDate,
-        note: "Платёж исполнен"
+        note: "Платёж исполнен",
+        categoryId: updated.categoryId
       }
     });
     await tx.history.create({ data: { userId, type: "payment_paid", payload: { id, name: updated.name, amount: String(updated.amount), status } } });

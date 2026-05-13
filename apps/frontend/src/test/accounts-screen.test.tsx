@@ -56,4 +56,19 @@ describe("AccountsScreen", () => {
       expect(screen.getByText("Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.")).toBeInTheDocument();
     });
   });
+
+  it("keeps empty add buttons disabled so they do not look broken", () => {
+    render(<AccountsHarness />);
+
+    expect(screen.getByRole("button", { name: "Добавить счёт" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Добавить долговой счёт" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Название счёта"), { target: { value: "Карта" } });
+    expect(screen.getByRole("button", { name: "Добавить счёт" })).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Название долгового счёта"), { target: { value: "Кредитка" } });
+    expect(screen.getByRole("button", { name: "Добавить долговой счёт" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Сумма долга"), { target: { value: "1000" } });
+    expect(screen.getByRole("button", { name: "Добавить долговой счёт" })).toBeEnabled();
+  });
 });

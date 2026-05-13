@@ -1,6 +1,8 @@
 import type { Prisma } from "@prisma/client";
+import { distributeUnallocatedMovement } from "@wallet/shared";
 import { badRequest, notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { ensureDefaultCategories } from "../categories/categories.service";
 import { calculateDashboardBalances } from "../finance/finance-calculations";
 import { mapAccount, mapSnapshot } from "../finance/finance-mappers";
 import { toMoney, toNumber } from "../finance/finance-utils";
@@ -43,6 +45,7 @@ export async function reconcileBalances(
     editedBalance?: string | null;
   }
 ) {
+  await ensureDefaultCategories(userId);
   return prisma.$transaction(async (tx) => {
     for (const account of input.accounts) {
       const existing = await tx.account.findFirst({ where: { id: account.id, userId } });
@@ -90,13 +93,46 @@ export async function reconcileBalances(
       payments: payments.map((payment) => ({ amount: toNumber(payment.amount), status: payment.status }))
     });
 
+    const snapshotDelta = previousSnapshot ? toNumber(snapshot.netBalance) - toNumber(previousSnapshot.netBalance) : 0;
+    const executedOperations = previousSnapshot
+      ? await tx.operation.findMany({
+          where: {
+            userId,
+            operationDate: { gt: previousSnapshot.createdAt, lte: snapshot.createdAt },
+            kind: { not: "unallocated" }
+          }
+        })
+      : [];
+    const fixedDelta = executedOperations.reduce((sum, operation) => sum + operationNetDelta(operation.kind, toNumber(operation.amount)), 0);
+    const unallocatedDelta = snapshotDelta - fixedDelta;
+
+    if (previousSnapshot && Math.abs(unallocatedDelta) > 0.009) {
+      const category = await tx.category.findFirst({ where: { userId, name: "Нераспределено" }, select: { id: true } });
+      await tx.operation.createMany({
+        data: distributeUnallocatedMovement({
+          amount: unallocatedDelta,
+          from: previousSnapshot.createdAt.toISOString(),
+          to: snapshot.createdAt.toISOString()
+        }).map((item) => ({
+          userId,
+          kind: "unallocated" as const,
+          name: unallocatedDelta < 0 ? "Нераспределённые расходы" : "Дополнительные доходы",
+          amount: item.amount,
+          operationDate: new Date(item.date),
+          note: "Создано автоматически при сверке остатков",
+          categoryId: category?.id ?? null
+        }))
+      });
+    }
+
     const payload: Prisma.JsonObject = {
       previousSnapshot: previousSnapshot ? mapSnapshot(previousSnapshot) : null,
       nextSnapshot: mapSnapshot(snapshot),
-      snapshotDelta: previousSnapshot ? toMoney(toNumber(snapshot.netBalance) - toNumber(previousSnapshot.netBalance)) : toMoney(0),
+      snapshotDelta: previousSnapshot ? toMoney(snapshotDelta) : toMoney(0),
       calculatedBalance: toMoney(summary.calculatedBalance),
       currentBalance: toMoney(summary.currentBalance),
-      additionalExpenses: toMoney(summary.additionalExpenses)
+      additionalExpenses: toMoney(summary.additionalExpenses),
+      distributedMovement: previousSnapshot ? toMoney(unallocatedDelta) : toMoney(0)
     };
 
     const history = await tx.history.create({ data: { userId, type: "balance_reconciled", payload } });
@@ -116,4 +152,11 @@ export async function reconcileBalances(
       history
     };
   });
+}
+
+function operationNetDelta(kind: string, amount: number) {
+  if (kind === "income") return amount;
+  if (kind === "expense") return -amount;
+  if (kind === "unallocated") return amount;
+  return 0;
 }

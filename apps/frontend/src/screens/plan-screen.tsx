@@ -1,4 +1,4 @@
-import { applyOperationEntries, generateMonthlySchedule, type IncomeDto, type IncomeStatus, type PaymentDto, type PaymentStatus, type PlannedOperationDto } from "@wallet/shared";
+import { applyOperationEntries, generateMonthlySchedule, type CategoryDto, type IncomeDto, type IncomeStatus, type PaymentDto, type PaymentStatus, type PlannedOperationDto } from "@wallet/shared";
 import { Check, Plus, Trash2, WalletCards } from "lucide-react";
 import { useState } from "react";
 import { AmountInput } from "../components/common/amount-input";
@@ -21,9 +21,11 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
   const [incomeName, setIncomeName] = useState("");
   const [incomeAmount, setIncomeAmount] = useState("0.00");
   const [incomeDate, setIncomeDate] = useState(today);
+  const [incomeCategoryId, setIncomeCategoryId] = useState("");
   const [paymentName, setPaymentName] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("0.00");
   const [paymentDate, setPaymentDate] = useState(today);
+  const [paymentCategoryId, setPaymentCategoryId] = useState("");
   const [paymentRepeatEnabled, setPaymentRepeatEnabled] = useState(false);
   const [paymentRepeatCount, setPaymentRepeatCount] = useState("10");
   const [paymentFinalDiffers, setPaymentFinalDiffers] = useState(false);
@@ -42,6 +44,9 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
   const selectedRepaymentDebtId = repaymentTargetDebtId || wallet.data.debts[0]?.id || "";
   const selectedRepaymentAccount = wallet.data.accounts.find((account) => account.id === selectedRepaymentAccountId) ?? wallet.data.accounts[0];
   const selectedRepaymentDebt = wallet.data.debts.find((debt) => debt.id === selectedRepaymentDebtId) ?? wallet.data.debts[0];
+  const incomeCategories = wallet.data.categories.filter((category) => category.type === "income");
+  const expenseCategories = wallet.data.categories.filter((category) => category.type === "expense");
+  const creditCategoryId = expenseCategories.find((category) => category.name === "Кредиты")?.id ?? null;
   const paymentScheduleCount = Number(paymentRepeatCount);
   const paymentScheduleInvalid = paymentRepeatEnabled && (!Number.isFinite(paymentScheduleCount) || paymentScheduleCount < 1 || paymentScheduleCount > 120);
   const repaymentScheduleCount = Number(repaymentRepeatCount);
@@ -73,14 +78,15 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
       actualDate: null,
       effectiveDate: plannedDate,
       status: plannedIncomeStatus,
-      note: null
+      note: null,
+      categoryId: incomeCategoryId || null
     };
 
     if (localOnly) {
       applyLocalIncome(income);
     } else {
       try {
-        await api.createIncome({ name, amount, plannedDate });
+        await api.createIncome({ name, amount, plannedDate, categoryId: incomeCategoryId || null });
         await wallet.refresh();
       } catch {
         applyLocalIncome(income);
@@ -112,7 +118,8 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
       actualDate: null,
       effectiveDate: new Date(item.plannedDate).toISOString(),
       status: plannedPaymentStatus,
-      note: null
+      note: null,
+      categoryId: paymentCategoryId || null
     }));
 
     if (localOnly) {
@@ -120,7 +127,7 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
     } else {
       try {
         for (const payment of payments) {
-          await api.createPayment({ name, amount: payment.amount, plannedDate: payment.plannedDate });
+          await api.createPayment({ name, amount: payment.amount, plannedDate: payment.plannedDate, categoryId: payment.categoryId ?? null });
         }
         await wallet.refresh();
       } catch {
@@ -217,7 +224,8 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
         sourceAccountId: sourceAccount.id,
         targetAccountId: null,
         targetDebtId: targetDebt.id,
-        seriesId
+        seriesId,
+        categoryId: creditCategoryId
       };
     });
 
@@ -234,7 +242,8 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
             count: Math.floor(repaymentScheduleCount),
             finalAmount: repaymentFinalDiffers ? normalizeMoney(repaymentFinalAmount) : undefined,
             sourceAccountId: sourceAccount.id,
-            targetDebtId: targetDebt.id
+            targetDebtId: targetDebt.id,
+            categoryId: creditCategoryId
           });
         } else {
           await api.createPlannedOperation(items[0]);
@@ -363,6 +372,7 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
             plannedOperationId: item.id,
             seriesId: item.seriesId,
             createdAt: new Date().toISOString(),
+            categoryId: item.categoryId ?? null,
             entries: [
               { id: createId(), targetType: "account", targetId: item.sourceAccountId ?? "", amount: (-amount).toFixed(2) },
               { id: createId(), targetType: "debt", targetId: item.targetDebtId ?? "", amount: amount.toFixed(2) }
@@ -384,15 +394,20 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
           actionLabel="Добавить доход"
           nameLabel="Название дохода"
           amountLabel="Сумма дохода"
+          categoryLabel="Категория дохода"
+          categories={incomeCategories}
+          categoryId={incomeCategoryId}
           onName={setIncomeName}
           onAmount={setIncomeAmount}
           onDate={setIncomeDate}
+          onCategory={setIncomeCategoryId}
           onSubmit={() => void addIncome()}
+          disabled={!incomeName.trim() || Number(incomeAmount) <= 0}
         />
         {wallet.data.income.length === 0 ? <p className="mt-3 rounded-md border border-line p-3 text-sm text-slate-400">Запланированных доходов пока нет.</p> : null}
         <div className="mt-3 space-y-3">
           {wallet.data.income.map((item) => (
-            <PlanRow key={item.id} item={item} tone="income" onDone={() => void markIncome(item.id)} onDelete={() => void deleteIncome(item.id)} />
+            <PlanRow key={item.id} item={item} categories={wallet.data.categories} tone="income" onDone={() => void markIncome(item.id)} onDelete={() => void deleteIncome(item.id)} />
           ))}
         </div>
       </Card>
@@ -406,11 +421,15 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
           actionLabel="Добавить платёж"
           nameLabel="Название платежа"
           amountLabel="Сумма платежа"
+          categoryLabel="Категория платежа"
+          categories={expenseCategories}
+          categoryId={paymentCategoryId}
           onName={setPaymentName}
           onAmount={setPaymentAmount}
           onDate={setPaymentDate}
+          onCategory={setPaymentCategoryId}
           onSubmit={() => void addPayment()}
-          disabled={paymentScheduleInvalid}
+          disabled={paymentScheduleInvalid || !paymentName.trim() || Number(paymentAmount) <= 0}
         />
         <ScheduleBuilder
           enabled={paymentRepeatEnabled}
@@ -426,7 +445,7 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
         {wallet.data.payments.length === 0 ? <p className="mt-3 rounded-md border border-line p-3 text-sm text-slate-400">Обязательных платежей пока нет.</p> : null}
         <div className="mt-3 space-y-3">
           {wallet.data.payments.map((item) => (
-            <PlanRow key={item.id} item={item} tone="payment" onDone={() => void markPayment(item.id)} onDelete={() => void deletePayment(item.id)} />
+            <PlanRow key={item.id} item={item} categories={wallet.data.categories} tone="payment" onDone={() => void markPayment(item.id)} onDelete={() => void deletePayment(item.id)} />
           ))}
         </div>
       </Card>
@@ -481,7 +500,7 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
                 type="button"
                 onClick={() => void addDebtRepayment()}
                 aria-label="Добавить погашение долга"
-                disabled={repaymentExceedsDebt || repaymentPreviewAmount <= 0 || repaymentScheduleInvalid}
+                disabled={!repaymentName.trim() || repaymentExceedsDebt || repaymentPreviewAmount <= 0 || repaymentScheduleInvalid}
               >
                 <Plus className="mx-auto" size={18} />
               </button>
@@ -513,7 +532,7 @@ export function PlanScreen({ wallet, demoMode = false }: { wallet: WalletState; 
           {wallet.data.plannedOperations
             .filter((item) => item.kind === "debt_repayment")
             .map((item) => (
-              <DebtRepaymentRow key={item.id} item={item} debts={wallet.data.debts} onDelete={() => void deleteDebtRepayment(item.id)} onDone={() => void markDebtRepayment(item)} />
+              <DebtRepaymentRow key={item.id} item={item} categories={wallet.data.categories} debts={wallet.data.debts} onDelete={() => void deleteDebtRepayment(item.id)} onDone={() => void markDebtRepayment(item)} />
             ))}
         </div>
       </Card>
@@ -528,9 +547,13 @@ function PlanForm({
   actionLabel,
   nameLabel,
   amountLabel,
+  categoryLabel,
+  categories,
+  categoryId,
   onName,
   onAmount,
   onDate,
+  onCategory,
   onSubmit,
   disabled = false
 }: {
@@ -540,9 +563,13 @@ function PlanForm({
   actionLabel: string;
   nameLabel: string;
   amountLabel: string;
+  categoryLabel: string;
+  categories: CategoryDto[];
+  categoryId: string;
   onName: (value: string) => void;
   onAmount: (value: string) => void;
   onDate: (value: string) => void;
+  onCategory: (value: string) => void;
   onSubmit: () => void;
   disabled?: boolean;
 }) {
@@ -567,6 +594,22 @@ function PlanForm({
         <span className="sm:hidden">{actionLabel}</span>
       </button>
       <input className="rounded-md border border-line bg-ink px-3 py-2 text-sm sm:col-span-3" type="date" value={date} onChange={(event) => onDate(event.target.value)} aria-label={`${actionLabel}: дата`} />
+      <label className="block text-xs font-bold text-slate-400 sm:col-span-3">
+        {categoryLabel}
+        <select
+          aria-label={categoryLabel}
+          className="mt-1 w-full rounded-md border border-line bg-ink px-3 py-2 text-sm text-white"
+          value={categoryId}
+          onChange={(event) => onCategory(event.target.value)}
+        >
+          <option value="">Без категории</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="flex flex-wrap gap-2 sm:col-span-3">
         {quickDateOptions().map((item) => (
           <button key={item.label} className="rounded-full bg-action/15 px-3 py-1.5 text-xs font-extrabold text-action" type="button" onClick={() => onDate(item.value)}>
@@ -633,27 +676,28 @@ function ScheduleBuilder({
   );
 }
 
-function PlanRow({ item, tone, onDone, onDelete }: { item: IncomeDto | PaymentDto; tone: "income" | "payment"; onDone: () => void; onDelete: () => void }) {
+function PlanRow({ item, categories, tone, onDone, onDelete }: { item: IncomeDto | PaymentDto; categories: CategoryDto[]; tone: "income" | "payment"; onDone: () => void; onDelete: () => void }) {
   const isDone = item.status.includes("received") || item.status.includes("paid");
   const canMarkDone = !isDone && !["cancelled", "skipped"].includes(item.status);
+  const category = categoryName(categories, item.categoryId ?? null);
 
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
       <WalletCards className={tone === "income" ? "text-positive" : item.status === "overdue" ? "text-danger" : "text-amber"} size={20} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-bold">{item.name}</p>
-        <p className="text-xs text-slate-500">{planDate(item.effectiveDate)}</p>
+        <p className="line-clamp-2 font-bold leading-snug">{item.name}</p>
+        <p className="text-xs text-slate-500">{category ? `${category} • ` : ""}{planDate(item.effectiveDate)}</p>
       </div>
       <div className="text-right">
         <p className="font-bold">{money(item.amount)}</p>
         <Badge status={item.status} />
       </div>
       {canMarkDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f]" type="button" onClick={onDone} aria-label={tone === "income" ? "Получено" : "Оплачено"}>
+        <button className="grid h-11 w-11 flex-none place-items-center rounded-md bg-positive text-[#07160f]" type="button" onClick={onDone} aria-label={tone === "income" ? "Получено" : "Оплачено"}>
           <Check size={17} />
         </button>
       ) : null}
-      <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={onDelete} aria-label={tone === "income" ? "Удалить доход" : "Удалить платёж"}>
+      <button className="grid h-11 w-11 flex-none place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={onDelete} aria-label={tone === "income" ? "Удалить доход" : "Удалить платёж"}>
         <Trash2 size={16} />
       </button>
     </div>
@@ -669,15 +713,16 @@ function DebtBalance({ label, amount, tone }: { label: string; amount: string; t
   );
 }
 
-function DebtRepaymentRow({ item, debts, onDelete, onDone }: { item: PlannedOperationDto; debts: { id: string; amount: string }[]; onDelete: () => void; onDone: () => void }) {
+function DebtRepaymentRow({ item, categories, debts, onDelete, onDone }: { item: PlannedOperationDto; categories: CategoryDto[]; debts: { id: string; amount: string }[]; onDelete: () => void; onDone: () => void }) {
   const isDone = item.status === "done";
   const overLimit = isDebtRepaymentOverLimit(item, debts);
+  const category = categoryName(categories, item.categoryId ?? null) ?? "Кредиты";
   return (
     <div className={`flex items-center gap-3 ${isDone ? "opacity-55" : ""}`}>
       <WalletCards className="text-action" size={20} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-bold">{item.name}</p>
-        <p className="text-xs text-slate-500">Погашение долга • {planDate(item.effectiveDate)}</p>
+        <p className="line-clamp-2 font-bold leading-snug">{item.name}</p>
+        <p className="text-xs text-slate-500">{category} • Погашение долга • {planDate(item.effectiveDate)}</p>
         {overLimit && !isDone ? <p className="mt-1 text-xs font-bold text-amber">Сумма погашения больше текущего долга</p> : null}
       </div>
       <div className="text-right">
@@ -685,12 +730,12 @@ function DebtRepaymentRow({ item, debts, onDelete, onDone }: { item: PlannedOper
         <Badge status={item.status} />
       </div>
       {!isDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md bg-positive text-[#07160f] disabled:bg-white/10 disabled:text-slate-500" type="button" onClick={onDone} aria-label="Погашение выполнено" disabled={overLimit}>
+        <button className="grid h-11 w-11 flex-none place-items-center rounded-md bg-positive text-[#07160f] disabled:bg-white/10 disabled:text-slate-500" type="button" onClick={onDone} aria-label="Погашение выполнено" disabled={overLimit}>
           <Check size={17} />
         </button>
       ) : null}
       {!isDone ? (
-        <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={onDelete} aria-label={`Удалить погашение долга ${item.name}`}>
+        <button className="grid h-11 w-11 flex-none place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={onDelete} aria-label={`Удалить погашение долга ${item.name}`}>
           <Trash2 size={16} />
         </button>
       ) : null}
@@ -719,6 +764,11 @@ function paymentWord(count: number) {
 
 function planDate(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+}
+
+function categoryName(categories: CategoryDto[], id: string | null) {
+  if (!id) return null;
+  return categories.find((category) => category.id === id)?.name ?? null;
 }
 
 function quickDateOptions() {

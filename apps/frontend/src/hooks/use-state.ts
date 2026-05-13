@@ -7,9 +7,10 @@ import { emptyState } from "../mock/state";
 const LOCAL_STATE_KEY = "wallet_local_state";
 
 export function normalizeDashboardState(state: DashboardStateDto): DashboardStateDto {
-  const legacy = state as DashboardStateDto & Partial<Pick<DashboardStateDto, "operations" | "plannedOperations">>;
+  const legacy = state as DashboardStateDto & Partial<Pick<DashboardStateDto, "categories" | "operations" | "plannedOperations">>;
   return {
     ...state,
+    categories: legacy.categories ?? emptyState.categories,
     operations: legacy.operations ?? [],
     plannedOperations: legacy.plannedOperations ?? []
   };

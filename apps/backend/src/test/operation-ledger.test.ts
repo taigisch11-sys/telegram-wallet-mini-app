@@ -1,4 +1,4 @@
-import { applyOperationEntries, generateMonthlySchedule } from "@wallet/shared";
+import { applyOperationEntries, distributeUnallocatedMovement, generateMonthlySchedule } from "@wallet/shared";
 import { describe, expect, it } from "vitest";
 
 describe("operation ledger helpers", () => {
@@ -31,5 +31,18 @@ describe("operation ledger helpers", () => {
     expect(rows[0]).toMatchObject({ amount: "15485.00", plannedDate: "2026-05-22" });
     expect(rows[9]).toMatchObject({ amount: "15485.00", plannedDate: "2027-02-22" });
     expect(rows[10]).toMatchObject({ amount: "12500.00", plannedDate: "2027-03-22" });
+  });
+
+  it("distributes unallocated movement evenly by day between balance checks", () => {
+    const rows = distributeUnallocatedMovement({
+      amount: "-700.00",
+      from: "2026-05-01T10:00:00.000Z",
+      to: "2026-05-07T10:00:00.000Z"
+    });
+
+    expect(rows).toHaveLength(7);
+    expect(rows[0]).toMatchObject({ amount: "-100.00", date: "2026-05-01" });
+    expect(rows[6]).toMatchObject({ amount: "-100.00", date: "2026-05-07" });
+    expect(rows.reduce((sum, row) => sum + Number(row.amount), 0)).toBe(-700);
   });
 });

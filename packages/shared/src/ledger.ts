@@ -24,6 +24,18 @@ export type MonthlyScheduleItem = {
   amount: string;
 };
 
+export type UnallocatedDistributionInput = {
+  amount: string | number;
+  from?: string | null;
+  to?: string | null;
+  maxDays?: number;
+};
+
+export type UnallocatedDistributionItem = {
+  date: string;
+  amount: string;
+};
+
 export function applyOperationEntries(input: LedgerBalanceInput, entries: LedgerEntryInput[]) {
   const accounts = input.accounts.map((account) => ({ ...account }));
   const debts = input.debts.map((debt) => ({ ...debt }));
@@ -49,6 +61,28 @@ export function applyOperationEntries(input: LedgerBalanceInput, entries: Ledger
   };
 }
 
+export function distributeUnallocatedMovement(input: UnallocatedDistributionInput): UnallocatedDistributionItem[] {
+  const totalCents = Math.round(Number(String(input.amount).replace(",", ".")) * 100);
+  if (!Number.isFinite(totalCents) || totalCents === 0) return [];
+
+  const to = startOfUtcDay(input.to ?? new Date().toISOString());
+  const from = startOfUtcDay(input.from ?? addDays(to, -6).toISOString());
+  const start = from.getTime() <= to.getTime() ? from : to;
+  const rawDays = Math.floor((to.getTime() - start.getTime()) / dayMs) + 1;
+  const days = Math.max(1, Math.min(input.maxDays ?? 31, rawDays));
+  const baseCents = Math.trunc(totalCents / days);
+  let remainder = totalCents - baseCents * days;
+
+  return Array.from({ length: days }, (_, index) => {
+    const remainderStep = remainder === 0 ? 0 : remainder > 0 ? 1 : -1;
+    remainder -= remainderStep;
+    return {
+      date: toDateOnly(addDays(start, index)),
+      amount: ((baseCents + remainderStep) / 100).toFixed(2)
+    };
+  });
+}
+
 export function generateMonthlySchedule(input: MonthlyScheduleInput): MonthlyScheduleItem[] {
   const count = Math.max(1, Math.floor(Number(input.count) || 1));
   const baseAmount = normalizeMoney(input.amount);
@@ -59,6 +93,22 @@ export function generateMonthlySchedule(input: MonthlyScheduleInput): MonthlySch
     plannedDate: addMonthsPreservingDay(input.startDate, index),
     amount: index === count - 1 ? finalAmount : baseAmount
   }));
+}
+
+const dayMs = 24 * 60 * 60 * 1000;
+
+function startOfUtcDay(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return startOfUtcDay(new Date().toISOString());
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function addDays(value: Date, days: number) {
+  return new Date(value.getTime() + days * dayMs);
+}
+
+function toDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 export function normalizeMoney(value: string | number) {

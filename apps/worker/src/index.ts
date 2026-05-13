@@ -5,8 +5,10 @@ import { markDoneSchema, settingsEditedBalanceSchema, settingsStartBalanceSchema
 import { authUser, findOrCreateUser, requireAuth, signToken } from "./auth";
 import { id, sql } from "./db";
 import type { WorkerEnv } from "./env";
+import { normalizeDebtAmount } from "./money";
 import {
   createAccount,
+  createCategory,
   createDebt,
   createIncome,
   createPayment,
@@ -14,15 +16,18 @@ import {
   createPlannedOperationSeries,
   dashboardState,
   deleteAccount,
+  deleteCategory,
   deleteDebt,
   deleteIncome,
   deletePayment,
   deletePlannedOperation,
   history,
+  listCategories,
   markPlannedOperationDone,
   reconcile,
   timeseries,
   updateIncome,
+  updateCategory,
   updatePayment
 } from "./state";
 import { verifyTelegramInitData } from "./telegram";
@@ -122,6 +127,26 @@ app.post("/api/accounts/reconcile", async (c) => {
   return c.json(await reconcile(c.env, user.id, await c.req.json()));
 });
 
+app.get("/api/categories", async (c) => {
+  const user = await authUser(c);
+  return c.json(await listCategories(c.env, user.id));
+});
+
+app.post("/api/categories", async (c) => {
+  const user = await authUser(c);
+  return c.json(await createCategory(c.env, user.id, await c.req.json()), 201);
+});
+
+app.patch("/api/categories/:id", async (c) => {
+  const user = await authUser(c);
+  return c.json(await updateCategory(c.env, user.id, c.req.param("id"), await c.req.json()));
+});
+
+app.delete("/api/categories/:id", async (c) => {
+  const user = await authUser(c);
+  return c.json(await deleteCategory(c.env, user.id, c.req.param("id")));
+});
+
 app.get("/api/debts", async (c) => {
   const user = await authUser(c);
   return c.json((await dashboardState(c.env, user.id)).debts);
@@ -142,7 +167,7 @@ app.patch("/api/debts/:id", async (c) => {
   const body = await c.req.json<{ name?: string; amount?: string | number }>();
   const rows = await sql(c.env)`
     UPDATE "Debt"
-    SET name = COALESCE(${body.name ?? null}, name), amount = COALESCE(${body.amount === undefined ? null : String(body.amount)}, amount)
+    SET name = COALESCE(${body.name ?? null}, name), amount = COALESCE(${body.amount === undefined ? null : String(normalizeDebtAmount(body.amount))}, amount)
     WHERE id = ${c.req.param("id")} AND "userId" = ${user.id}
     RETURNING id, name, amount, "createdAt"
   `;
@@ -172,15 +197,16 @@ app.patch("/api/income/:id", async (c) => {
 app.patch("/api/income/:id/mark-received", async (c) => {
   const user = await authUser(c);
   const body = markDoneSchema.parse(await c.req.json().catch(() => ({})));
+  const actualDate = body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString();
   const rows = await sql(c.env)`
     UPDATE "Income"
-    SET status = CASE WHEN "plannedDate"::date >= CURRENT_DATE THEN 'received_on_time'::"IncomeStatus" ELSE 'received_late'::"IncomeStatus" END,
-        "actualDate" = ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}
+    SET status = CASE WHEN ${actualDate}::timestamp <= COALESCE("expectedDate", "plannedDate") THEN 'received_on_time'::"IncomeStatus" ELSE 'received_late'::"IncomeStatus" END,
+        "actualDate" = ${actualDate}
     WHERE id = ${c.req.param("id")} AND "userId" = ${user.id}
-    RETURNING name, amount
+    RETURNING name, amount, "categoryId"
   `;
   if (rows[0]) {
-    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "createdAt") VALUES (${id()}, ${user.id}, 'income'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}, 'Доход получен', NOW())`;
+    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "categoryId", "createdAt") VALUES (${id()}, ${user.id}, 'income'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${actualDate}, 'Доход получен', ${rows[0].categoryId ?? null}, NOW())`;
   }
   await sql(c.env)`INSERT INTO "History" (id, "userId", type, payload, "createdAt") VALUES (${id()}, ${user.id}, 'income_received', ${JSON.stringify({ id: c.req.param("id") })}, NOW())`;
   return c.json({ ok: true });
@@ -209,15 +235,16 @@ app.patch("/api/payments/:id", async (c) => {
 app.patch("/api/payments/:id/mark-paid", async (c) => {
   const user = await authUser(c);
   const body = markDoneSchema.parse(await c.req.json().catch(() => ({})));
+  const actualDate = body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString();
   const rows = await sql(c.env)`
     UPDATE "Payment"
-    SET status = CASE WHEN "plannedDate"::date >= CURRENT_DATE THEN 'paid_on_time'::"PaymentStatus" ELSE 'paid_late'::"PaymentStatus" END,
-        "actualDate" = ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}
+    SET status = CASE WHEN ${actualDate}::timestamp <= COALESCE("expectedDate", "plannedDate") THEN 'paid_on_time'::"PaymentStatus" ELSE 'paid_late'::"PaymentStatus" END,
+        "actualDate" = ${actualDate}
     WHERE id = ${c.req.param("id")} AND "userId" = ${user.id}
-    RETURNING name, amount
+    RETURNING name, amount, "categoryId"
   `;
   if (rows[0]) {
-    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "createdAt") VALUES (${id()}, ${user.id}, 'expense'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${body.actualDate ? new Date(body.actualDate).toISOString() : new Date().toISOString()}, 'Платёж исполнен', NOW())`;
+    await sql(c.env)`INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "categoryId", "createdAt") VALUES (${id()}, ${user.id}, 'expense'::"OperationKind", ${rows[0].name}, ${rows[0].amount}, ${actualDate}, 'Платёж исполнен', ${rows[0].categoryId ?? null}, NOW())`;
   }
   await sql(c.env)`INSERT INTO "History" (id, "userId", type, payload, "createdAt") VALUES (${id()}, ${user.id}, 'payment_paid', ${JSON.stringify({ id: c.req.param("id") })}, NOW())`;
   return c.json({ ok: true });
@@ -284,7 +311,9 @@ app.get("/api/history", async (c) => {
 
 app.get("/api/analytics/timeseries", async (c) => {
   const user = await authUser(c);
-  return c.json(await timeseries(c.env, user.id));
+  const period = c.req.query("period");
+  const safePeriod = period === "week" || period === "month" || period === "quarter" || period === "year" ? period : "month";
+  return c.json(await timeseries(c.env, user.id, safePeriod));
 });
 
 type TelegramWebhookUpdate = {

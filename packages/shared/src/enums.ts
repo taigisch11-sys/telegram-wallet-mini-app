@@ -32,7 +32,15 @@ export const PlannedOperationStatus = {
   cancelled: "cancelled"
 } as const;
 
+export const CategoryType = {
+  income: "income",
+  expense: "expense",
+  transfer: "transfer",
+  debt: "debt"
+} as const;
+
 export type IncomeStatus = (typeof IncomeStatus)[keyof typeof IncomeStatus];
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 export type OperationKind = (typeof OperationKind)[keyof typeof OperationKind];
 export type PlannedOperationStatus = (typeof PlannedOperationStatus)[keyof typeof PlannedOperationStatus];
+export type CategoryType = (typeof CategoryType)[keyof typeof CategoryType];

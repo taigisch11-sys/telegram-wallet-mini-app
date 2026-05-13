@@ -13,16 +13,53 @@ export async function getTimeseries(userId: string, period: keyof typeof periodD
   const from = new Date();
   from.setDate(from.getDate() - periodDays[period]);
 
-  const snapshots = await prisma.balanceSnapshot.findMany({
-    where: { userId, createdAt: { gte: from } },
-    orderBy: { createdAt: "asc" }
-  });
+  const [snapshots, previousSnapshot, unallocated] = await Promise.all([
+    prisma.balanceSnapshot.findMany({
+      where: { userId, createdAt: { gte: from } },
+      orderBy: { createdAt: "asc" }
+    }),
+    prisma.balanceSnapshot.findFirst({
+      where: { userId, createdAt: { lt: from } },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.operation.findMany({
+      where: { userId, kind: "unallocated", operationDate: { gte: from } },
+      select: { operationDate: true, amount: true }
+    })
+  ]);
+  const unallocatedByDate = unallocated.reduce<Record<string, number>>((acc, item) => {
+    const date = item.operationDate.toISOString().slice(0, 10);
+    acc[date] = (acc[date] ?? 0) + toNumber(item.amount);
+    return acc;
+  }, {});
 
-  return snapshots.map((snapshot) => ({
-    date: snapshot.createdAt.toISOString().slice(0, 10),
-    netBalance: toNumber(snapshot.netBalance),
-    accountBalance: toNumber(snapshot.accountBalance),
-    debtBalance: toNumber(snapshot.debtBalance),
-    additionalExpenses: 0
-  }));
+  const snapshotsByDate = snapshots.reduce<Record<string, (typeof snapshots)[number]>>((acc, snapshot) => {
+    acc[snapshot.createdAt.toISOString().slice(0, 10)] = snapshot;
+    return acc;
+  }, {});
+  const dates = [...new Set([...Object.keys(snapshotsByDate), ...Object.keys(unallocatedByDate)])].sort();
+  let lastBalances = previousSnapshot
+    ? {
+        netBalance: toNumber(previousSnapshot.netBalance),
+        accountBalance: toNumber(previousSnapshot.accountBalance),
+        debtBalance: toNumber(previousSnapshot.debtBalance)
+      }
+    : { netBalance: 0, accountBalance: 0, debtBalance: 0 };
+
+  return dates.map((date) => {
+    const snapshot = snapshotsByDate[date];
+    if (snapshot) {
+      lastBalances = {
+        netBalance: toNumber(snapshot.netBalance),
+        accountBalance: toNumber(snapshot.accountBalance),
+        debtBalance: toNumber(snapshot.debtBalance)
+      };
+    }
+
+    return {
+      date,
+      ...lastBalances,
+      additionalExpenses: unallocatedByDate[date] ?? 0
+    };
+  });
 }

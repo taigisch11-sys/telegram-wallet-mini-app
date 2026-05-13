@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { DEFAULT_CATEGORIES } from "@wallet/shared";
 
 const prisma = new PrismaClient();
 
@@ -22,8 +23,13 @@ async function main() {
 
   await prisma.history.deleteMany({ where: { userId: user.id } });
   await prisma.balanceSnapshot.deleteMany({ where: { userId: user.id } });
+  await prisma.operationEntry.deleteMany({ where: { operation: { userId: user.id } } });
+  await prisma.operation.deleteMany({ where: { userId: user.id } });
+  await prisma.plannedOperation.deleteMany({ where: { userId: user.id } });
+  await prisma.operationSeries.deleteMany({ where: { userId: user.id } });
   await prisma.payment.deleteMany({ where: { userId: user.id } });
   await prisma.income.deleteMany({ where: { userId: user.id } });
+  await prisma.category.deleteMany({ where: { userId: user.id } });
   await prisma.debt.deleteMany({ where: { userId: user.id } });
   await prisma.account.deleteMany({ where: { userId: user.id } });
   await prisma.settings.deleteMany({ where: { userId: user.id } });
@@ -36,6 +42,12 @@ async function main() {
       editedBalance: "68650.00"
     }
   });
+
+  await prisma.category.createMany({
+    data: DEFAULT_CATEGORIES.map((category) => ({ userId: user.id, ...category }))
+  });
+  const categories = await prisma.category.findMany({ where: { userId: user.id } });
+  const categoryId = (name: string) => categories.find((category) => category.name === name)?.id ?? null;
 
   await prisma.account.createMany({
     data: [
@@ -60,7 +72,8 @@ async function main() {
         amount: "42000.00",
         plannedDate: daysFromNow(-8),
         actualDate: daysFromNow(-8),
-        status: "received_on_time"
+        status: "received_on_time",
+        categoryId: categoryId("Доход")
       },
       {
         userId: user.id,
@@ -69,14 +82,16 @@ async function main() {
         plannedDate: daysFromNow(-3),
         expectedDate: daysFromNow(2),
         status: "delayed",
-        note: "Клиент перенес оплату"
+        note: "Клиент перенес оплату",
+        categoryId: categoryId("Доход")
       },
       {
         userId: user.id,
         name: "Зарплата",
         amount: "78000.00",
         plannedDate: daysFromNow(12),
-        status: "planned"
+        status: "planned",
+        categoryId: categoryId("Доход")
       }
     ]
   });
@@ -89,28 +104,32 @@ async function main() {
         amount: "35000.00",
         plannedDate: daysFromNow(-2),
         actualDate: daysFromNow(-1),
-        status: "paid_late"
+        status: "paid_late",
+        categoryId: categoryId("Дом")
       },
       {
         userId: user.id,
         name: "Интернет",
         amount: "900.00",
         plannedDate: daysFromNow(-1),
-        status: "overdue"
+        status: "overdue",
+        categoryId: categoryId("Связь")
       },
       {
         userId: user.id,
         name: "Кредит",
         amount: "12000.00",
         plannedDate: daysFromNow(4),
-        status: "planned"
+        status: "planned",
+        categoryId: categoryId("Кредиты")
       },
       {
         userId: user.id,
         name: "Коммунальные",
         amount: "6200.00",
         plannedDate: daysFromNow(8),
-        status: "planned"
+        status: "planned",
+        categoryId: categoryId("Дом")
       }
     ]
   });

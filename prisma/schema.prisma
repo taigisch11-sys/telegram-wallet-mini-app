@@ -41,6 +41,13 @@ enum PlannedOperationStatus {
   cancelled
 }
 
+enum CategoryType {
+  income
+  expense
+  transfer
+  debt
+}
+
 model User {
   id                String             @id @default(cuid())
   telegramId        String             @unique
@@ -51,12 +58,33 @@ model User {
   debts             Debt[]
   incomes           Income[]
   payments          Payment[]
+  categories        Category[]
   operations        Operation[]
   plannedOperations PlannedOperation[]
   operationSeries   OperationSeries[]
   settings          Settings?
   snapshots         BalanceSnapshot[]
   history           History[]
+}
+
+model Category {
+  id                String             @id @default(cuid())
+  userId            String
+  name              String
+  type              CategoryType
+  color             String             @default("#5b8cff")
+  icon              String             @default("tag")
+  isDefault         Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incomes           Income[]
+  payments          Payment[]
+  operations        Operation[]
+  plannedOperations PlannedOperation[]
+  operationSeries   OperationSeries[]
+
+  @@unique([userId, name, type])
+  @@index([userId, type])
 }
 
 model Account {
@@ -91,10 +119,13 @@ model Income {
   actualDate   DateTime?
   status       IncomeStatus
   note         String?
+  categoryId   String?
   createdAt    DateTime     @default(now())
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, plannedDate])
+  @@index([categoryId])
 }
 
 model Payment {
@@ -107,10 +138,13 @@ model Payment {
   actualDate   DateTime?
   status       PaymentStatus
   note         String?
+  categoryId   String?
   createdAt    DateTime      @default(now())
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, plannedDate])
+  @@index([categoryId])
 }
 
 model OperationSeries {
@@ -125,11 +159,14 @@ model OperationSeries {
   sourceAccountId   String?
   targetAccountId   String?
   targetDebtId      String?
+  categoryId        String?
   createdAt         DateTime           @default(now())
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category          Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   plannedOperations PlannedOperation[]
 
   @@index([userId, createdAt])
+  @@index([categoryId])
 }
 
 model PlannedOperation {
@@ -147,12 +184,15 @@ model PlannedOperation {
   targetAccountId String?
   targetDebtId    String?
   seriesId        String?
+  categoryId      String?
   createdAt       DateTime               @default(now())
   user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   series          OperationSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  category        Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId, plannedDate])
   @@index([seriesId])
+  @@index([categoryId])
 }
 
 model Operation {
@@ -165,12 +205,15 @@ model Operation {
   note               String?
   plannedOperationId String?
   seriesId           String?
+  categoryId         String?
   createdAt          DateTime         @default(now())
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category           Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   entries            OperationEntry[]
 
   @@index([userId, operationDate])
   @@index([plannedOperationId])
+  @@index([categoryId])
 }
 
 model OperationEntry {

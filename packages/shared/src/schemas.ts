@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "./enums";
+import { CategoryType, IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "./enums";
 
 export const moneySchema = z.union([z.string(), z.number()]).transform(String);
 export const isoDateSchema = z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/));
@@ -18,6 +18,16 @@ export const debtInputSchema = z.object({
   amount: moneySchema
 });
 
+export const categoryInputSchema = z.object({
+  name: z.string().min(1).max(40),
+  type: z.nativeEnum(CategoryType).default(CategoryType.expense),
+  color: z.string().min(1).max(24).default("#5b8cff"),
+  icon: z.string().min(1).max(40).default("tag"),
+  isDefault: z.boolean().default(false)
+});
+
+const categoryIdSchema = z.string().min(1).nullish();
+
 export const incomeInputSchema = z.object({
   name: z.string().min(1),
   amount: moneySchema,
@@ -25,7 +35,8 @@ export const incomeInputSchema = z.object({
   expectedDate: isoDateSchema.nullish(),
   actualDate: isoDateSchema.nullish(),
   status: z.nativeEnum(IncomeStatus).default(IncomeStatus.planned),
-  note: z.string().nullish()
+  note: z.string().nullish(),
+  categoryId: categoryIdSchema
 });
 
 export const paymentInputSchema = z.object({
@@ -35,7 +46,8 @@ export const paymentInputSchema = z.object({
   expectedDate: isoDateSchema.nullish(),
   actualDate: isoDateSchema.nullish(),
   status: z.nativeEnum(PaymentStatus).default(PaymentStatus.planned),
-  note: z.string().nullish()
+  note: z.string().nullish(),
+  categoryId: categoryIdSchema
 });
 
 export const operationEntryInputSchema = z.object({
@@ -52,6 +64,7 @@ export const operationInputSchema = z.object({
   note: z.string().nullish(),
   plannedOperationId: z.string().nullish(),
   seriesId: z.string().nullish(),
+  categoryId: categoryIdSchema,
   entries: z.array(operationEntryInputSchema).default([])
 });
 
@@ -67,7 +80,8 @@ export const plannedOperationInputSchema = z.object({
   sourceAccountId: z.string().nullish(),
   targetAccountId: z.string().nullish(),
   targetDebtId: z.string().nullish(),
-  seriesId: z.string().nullish()
+  seriesId: z.string().nullish(),
+  categoryId: categoryIdSchema
 });
 
 export const plannedOperationSeriesInputSchema = z.object({
@@ -80,7 +94,8 @@ export const plannedOperationSeriesInputSchema = z.object({
   note: z.string().nullish(),
   sourceAccountId: z.string().nullish(),
   targetAccountId: z.string().nullish(),
-  targetDebtId: z.string().nullish()
+  targetDebtId: z.string().nullish(),
+  categoryId: categoryIdSchema
 });
 
 export const markDoneSchema = z.object({

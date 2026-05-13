@@ -1,14 +1,17 @@
 import { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "@wallet/shared";
 import { prisma } from "../../lib/prisma";
 import { calculateDashboardBalances, debtLoad } from "../finance/finance-calculations";
-import { mapAccount, mapDebt, mapIncome, mapOperation, mapPayment, mapPlannedOperation, mapSettings, mapSnapshot, mapUser } from "../finance/finance-mappers";
+import { ensureDefaultCategories } from "../categories/categories.service";
+import { mapAccount, mapCategory, mapDebt, mapIncome, mapOperation, mapPayment, mapPlannedOperation, mapSettings, mapSnapshot, mapUser } from "../finance/finance-mappers";
 import { effectiveDate, toMoney, toNumber } from "../finance/finance-utils";
 
 export async function getDashboardState(userId: string) {
-  const [user, accounts, debts, income, payments, operations, plannedOperations, settings, latestSnapshot] = await Promise.all([
+  await ensureDefaultCategories(userId);
+  const [user, accounts, debts, categories, income, payments, operations, plannedOperations, settings, latestSnapshot] = await Promise.all([
     prisma.user.findUniqueOrThrow({ where: { id: userId } }),
     prisma.account.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
     prisma.debt.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+    prisma.category.findMany({ where: { userId }, orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }] }),
     prisma.income.findMany({ where: { userId }, orderBy: { plannedDate: "asc" } }),
     prisma.payment.findMany({ where: { userId }, orderBy: { plannedDate: "asc" } }),
     prisma.operation.findMany({ where: { userId }, include: { entries: true }, orderBy: { operationDate: "desc" }, take: 100 }),
@@ -96,6 +99,7 @@ export async function getDashboardState(userId: string) {
     upcoming,
     accounts: accounts.map(mapAccount),
     debts: debts.map(mapDebt),
+    categories: categories.map(mapCategory),
     income: income.map(mapIncome),
     payments: payments.map(mapPayment),
     operations: operations.map(mapOperation),

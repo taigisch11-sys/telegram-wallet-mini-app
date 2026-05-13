@@ -84,12 +84,15 @@ export function LearningCoach({
           Шаг {step + 1} из {steps.length}
         </div>
         <div className="flex items-center gap-2">
-          {canGoBack ? (
-            <button type="button" className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-sm font-extrabold text-white" onClick={back}>
-              <ArrowLeft size={16} />
-              Назад
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-2 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={back}
+            disabled={!canGoBack}
+          >
+            <ArrowLeft size={16} />
+            Назад
+          </button>
           <button type="button" className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-[#10213d]" onClick={go}>
             {isLast ? "Повторить маршрут" : current.action}
             <ArrowRight size={16} />

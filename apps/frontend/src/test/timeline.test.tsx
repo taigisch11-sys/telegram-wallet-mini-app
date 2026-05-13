@@ -61,4 +61,32 @@ describe("Finance timeline", () => {
     expect(screen.getByText("Погашение кредитки")).toBeInTheDocument();
     expect(screen.getByText("Погашение долга")).toBeInTheDocument();
   });
+
+  it("explains unallocated movement as daily distribution instead of one jump", () => {
+    render(
+      <WalletScreen
+        wallet={{
+          data: {
+            ...emptyState,
+            balances: { ...emptyState.balances, additionalExpenses: "-700.00" },
+            latestSnapshot: {
+              id: "snapshot-now",
+              accountBalance: "9300.00",
+              debtBalance: "0.00",
+              netBalance: "9300.00",
+              createdAt: "2026-05-07T10:00:00.000Z"
+            }
+          },
+          loading: false,
+          error: null,
+          refresh: async () => {},
+          setData: () => {}
+        }}
+        onNavigate={() => {}}
+      />
+    );
+
+    expect(screen.getByText("7 дней по -100 ₽")).toBeInTheDocument();
+    expect(screen.getByText("Нераспределённые расходы")).toBeInTheDocument();
+  });
 });

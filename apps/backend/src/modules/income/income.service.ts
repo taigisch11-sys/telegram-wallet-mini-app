@@ -1,6 +1,7 @@
 import { IncomeStatus, OperationKind } from "@wallet/shared";
 import { notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { ensureCategoryBelongsToUser } from "../categories/categories.service";
 import { mapIncome } from "../finance/finance-mappers";
 
 export function resolveIncomeReceivedStatus(effectiveDate: string | Date, actualDate: string | Date) {
@@ -12,6 +13,7 @@ export async function listIncome(userId: string) {
 }
 
 export async function createIncome(userId: string, data: any) {
+  await ensureCategoryBelongsToUser(userId, data.categoryId);
   const income = await prisma.income.create({
     data: {
       userId,
@@ -21,7 +23,8 @@ export async function createIncome(userId: string, data: any) {
       expectedDate: data.expectedDate ? new Date(data.expectedDate) : null,
       actualDate: data.actualDate ? new Date(data.actualDate) : null,
       status: data.status,
-      note: data.note ?? null
+      note: data.note ?? null,
+      categoryId: data.categoryId ?? null
     }
   });
   await prisma.history.create({ data: { userId, type: "income_created", payload: { name: data.name, amount: data.amount } } });
@@ -30,13 +33,15 @@ export async function createIncome(userId: string, data: any) {
 
 export async function updateIncome(userId: string, id: string, data: any) {
   await ensureIncome(userId, id);
+  await ensureCategoryBelongsToUser(userId, data.categoryId);
   const income = await prisma.income.update({
     where: { id },
     data: {
       ...data,
       plannedDate: data.plannedDate ? new Date(data.plannedDate) : undefined,
       expectedDate: data.expectedDate === undefined ? undefined : data.expectedDate ? new Date(data.expectedDate) : null,
-      actualDate: data.actualDate === undefined ? undefined : data.actualDate ? new Date(data.actualDate) : null
+      actualDate: data.actualDate === undefined ? undefined : data.actualDate ? new Date(data.actualDate) : null,
+      categoryId: data.categoryId === undefined ? undefined : data.categoryId ?? null
     }
   });
   await prisma.history.create({ data: { userId, type: "income_updated", payload: { id, ...data } } });
@@ -57,7 +62,8 @@ export async function markIncomeReceived(userId: string, id: string, actualDateI
         name: updated.name,
         amount: updated.amount,
         operationDate: actualDate,
-        note: "Доход получен"
+        note: "Доход получен",
+        categoryId: updated.categoryId
       }
     });
     await tx.history.create({ data: { userId, type: "income_received", payload: { id, name: updated.name, amount: String(updated.amount), status } } });

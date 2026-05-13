@@ -20,7 +20,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     const header = req.header("authorization");
     const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
 
-    if (env.DEV_AUTH_BYPASS === "true" && token === "test-token") {
+    if (isDevAuthBypassAllowed(env) && token === "test-token") {
       const user = await prisma.user.upsert({
         where: { telegramId: "100000001" },
         update: {},
@@ -49,4 +49,8 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
   } catch (error) {
     return next(error instanceof AppError ? error : new AppError(401, "unauthorized", "Invalid token"));
   }
+}
+
+export function isDevAuthBypassAllowed(input: { NODE_ENV: string; DEV_AUTH_BYPASS: string }) {
+  return input.NODE_ENV !== "production" && input.DEV_AUTH_BYPASS === "true";
 }

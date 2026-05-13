@@ -1,4 +1,4 @@
-import type { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "./enums";
+import type { CategoryType, IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus } from "./enums";
 
 export type MoneyString = string;
 
@@ -24,6 +24,16 @@ export type DebtDto = {
   createdAt: string;
 };
 
+export type CategoryDto = {
+  id: string;
+  name: string;
+  type: CategoryType;
+  color: string;
+  icon: string;
+  isDefault: boolean;
+  createdAt: string;
+};
+
 export type IncomeDto = {
   id: string;
   name: string;
@@ -34,6 +44,7 @@ export type IncomeDto = {
   effectiveDate: string;
   status: IncomeStatus;
   note: string | null;
+  categoryId?: string | null;
 };
 
 export type PaymentDto = {
@@ -46,6 +57,7 @@ export type PaymentDto = {
   effectiveDate: string;
   status: PaymentStatus;
   note: string | null;
+  categoryId?: string | null;
 };
 
 export type OperationEntryDto = {
@@ -65,6 +77,7 @@ export type OperationDto = {
   plannedOperationId: string | null;
   seriesId: string | null;
   createdAt: string;
+  categoryId?: string | null;
   entries: OperationEntryDto[];
 };
 
@@ -83,6 +96,7 @@ export type PlannedOperationDto = {
   targetAccountId: string | null;
   targetDebtId: string | null;
   seriesId: string | null;
+  categoryId?: string | null;
 };
 
 export type SettingsDto = {
@@ -148,6 +162,7 @@ export type DashboardStateDto = {
   upcoming: UpcomingEventDto[];
   accounts: AccountDto[];
   debts: DebtDto[];
+  categories: CategoryDto[];
   income: IncomeDto[];
   payments: PaymentDto[];
   operations: OperationDto[];

@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { AppError } from "./errors";
 
+const telegramAuthMaxAgeSeconds = 24 * 60 * 60;
+
 export type TelegramInitUser = {
   id: number;
   username?: string;
@@ -15,7 +17,7 @@ export function validateTelegramInitData(initData: string, botToken: string) {
   const params = parseTelegramInitData(initData);
   const hash = params.get("hash");
 
-  if (!hash || !botToken) {
+  if (!hash || !/^[a-f0-9]{64}$/i.test(hash) || !botToken) {
     throw new AppError(401, "telegram_auth_invalid", "Invalid Telegram auth data");
   }
 
@@ -32,7 +34,20 @@ export function validateTelegramInitData(initData: string, botToken: string) {
     throw new AppError(401, "telegram_auth_invalid", "Invalid Telegram auth data");
   }
 
+  assertFreshAuthDate(params.get("auth_date"));
+
   return params;
+}
+
+function assertFreshAuthDate(value: string | null) {
+  const authDate = Number(value);
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(authDate)) {
+    throw new AppError(401, "telegram_auth_expired", "Telegram auth data is expired");
+  }
+  if (now - authDate > telegramAuthMaxAgeSeconds || authDate - now > 60) {
+    throw new AppError(401, "telegram_auth_expired", "Telegram auth data is expired");
+  }
 }
 
 export function extractTelegramUser(params: URLSearchParams): TelegramInitUser {

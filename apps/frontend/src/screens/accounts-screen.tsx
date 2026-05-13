@@ -180,7 +180,12 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Карта, вклад, наличные" value={newAccountName} onChange={(event) => setNewAccountName(event.target.value)} />
           </label>
           <AmountInput label="Остаток" value={newAccountBalance} onChange={setNewAccountBalance} helper="Нажмите, чтобы ввести сумму" compact />
-          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addAccount()}>
+          <button
+            className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white disabled:bg-white/10 disabled:text-slate-500 sm:col-span-2"
+            type="button"
+            onClick={() => void addAccount()}
+            disabled={!newAccountName.trim()}
+          >
             <Plus size={18} />
             Добавить счёт
           </button>
@@ -189,9 +194,9 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
         <div className="space-y-2">
           {wallet.data.accounts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Счетов пока нет. Добавьте карту, вклад или наличные.</p> : null}
           {wallet.data.accounts.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_132px_38px] items-center gap-2 rounded-md border border-line p-3">
+            <div key={item.id} className="grid grid-cols-[1fr_38px] items-center gap-2 rounded-md border border-line p-3 sm:grid-cols-[1fr_132px_38px]">
               <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <AmountInput
                   label={`Остаток счёта ${item.name}`}
                   value={accounts.find((account) => account.id === item.id)?.balance ?? item.balance}
@@ -203,7 +208,7 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
                   {diffLabel(valueDifference(accounts.find((account) => account.id === item.id)?.balance ?? item.balance, item.balance))}
                 </p>
               </div>
-              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteAccount(item.id)} aria-label={`Удалить счёт ${item.name}`}>
+              <button className="col-start-2 row-start-1 grid h-11 w-11 place-items-center justify-self-end rounded-md border border-danger/50 text-danger sm:col-auto sm:row-auto" type="button" onClick={() => void deleteAccount(item.id)} aria-label={`Удалить счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
             </div>
@@ -230,7 +235,12 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
             <input className="mt-1 w-full min-w-0 rounded-md border border-line bg-ink px-3 py-2 text-white" placeholder="Кредитка, кредит, рассрочка" value={newDebtName} onChange={(event) => setNewDebtName(event.target.value)} />
           </label>
           <AmountInput label="Сумма долга" value={newDebtAmount} onChange={setNewDebtAmount} helper="Введите без минуса" tone="danger" compact />
-          <button className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white sm:col-span-2" type="button" onClick={() => void addDebt()}>
+          <button
+            className="flex min-h-11 items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white disabled:bg-white/10 disabled:text-slate-500 sm:col-span-2"
+            type="button"
+            onClick={() => void addDebt()}
+            disabled={!newDebtName.trim() || Number(newDebtAmount) <= 0}
+          >
             <Plus size={18} />
             Добавить долговой счёт
           </button>
@@ -239,9 +249,9 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
         <div className="space-y-2">
           {wallet.data.debts.length === 0 ? <p className="rounded-md border border-line p-3 text-sm text-slate-400">Долговых счетов пока нет. Добавьте кредитку, кредит или рассрочку.</p> : null}
           {wallet.data.debts.map((item) => (
-            <div key={item.id} className="grid grid-cols-[1fr_132px_38px] items-center gap-2 rounded-md border border-line p-3">
+            <div key={item.id} className="grid grid-cols-[1fr_38px] items-center gap-2 rounded-md border border-line p-3 sm:grid-cols-[1fr_132px_38px]">
               <span className="min-w-0 break-words font-bold leading-snug">{item.name}</span>
-              <div>
+              <div className="col-span-2 sm:col-span-1">
                 <AmountInput
                   label={`Остаток долгового счёта ${item.name}`}
                   value={positiveMoney(debts.find((debt) => debt.id === item.id)?.amount ?? item.amount)}
@@ -254,7 +264,7 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
                   {diffLabel(valueDifference(debts.find((debt) => debt.id === item.id)?.amount ?? item.amount, item.amount))}
                 </p>
               </div>
-              <button className="grid h-9 w-9 place-items-center rounded-md border border-danger/50 text-danger" type="button" onClick={() => void deleteDebt(item.id)} aria-label={`Удалить долговой счёт ${item.name}`}>
+              <button className="col-start-2 row-start-1 grid h-11 w-11 place-items-center justify-self-end rounded-md border border-danger/50 text-danger sm:col-auto sm:row-auto" type="button" onClick={() => void deleteDebt(item.id)} aria-label={`Удалить долговой счёт ${item.name}`}>
                 <Trash2 size={16} />
               </button>
             </div>
@@ -263,7 +273,7 @@ export function AccountsScreen({ wallet, demoMode = false }: { wallet: WalletSta
       </Card>
 
       <Card>
-        <AmountInput label="Итог после корректировки" value={editedBalance} onChange={setEditedBalance} helper="Можно сверить общую чистую позицию" tone="warning" />
+        <AmountInput label="Итог после корректировки" value={editedBalance} onChange={setEditedBalance} helper="Можно сверить общую чистую позицию" tone="warning" allowNegative />
         <button className="mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-action px-4 py-3 font-extrabold text-white" type="button" onClick={() => void reconcile()}>
           <RefreshCw size={18} />
           Сохранить остатки

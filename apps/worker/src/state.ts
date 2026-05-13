@@ -1,5 +1,5 @@
-import { IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus, generateMonthlySchedule, type DashboardStateDto, type HistoryItemDto, type TimeseriesPointDto } from "@wallet/shared";
-import { accountInputSchema, debtInputSchema, incomeInputSchema, paymentInputSchema, plannedOperationInputSchema, plannedOperationSeriesInputSchema, reconcileSchema } from "@wallet/shared";
+import { DEFAULT_CATEGORIES, IncomeStatus, OperationKind, PaymentStatus, PlannedOperationStatus, distributeUnallocatedMovement, generateMonthlySchedule, type CategoryType, type DashboardStateDto, type HistoryItemDto, type TimeseriesPointDto } from "@wallet/shared";
+import { accountInputSchema, categoryInputSchema, debtInputSchema, incomeInputSchema, paymentInputSchema, plannedOperationInputSchema, plannedOperationSeriesInputSchema, reconcileSchema } from "@wallet/shared";
 import { id, sql } from "./db";
 import type { WorkerEnv } from "./env";
 import { currentMonth, effectiveDate, normalizeDebtAmount, toMoney, toNumber } from "./money";
@@ -14,6 +14,7 @@ type UserRow = {
 
 type AccountRow = { id: string; name: string; balance: string; createdAt: string | Date };
 type DebtRow = { id: string; name: string; amount: string; createdAt: string | Date };
+type CategoryRow = { id: string; name: string; type: string; color: string; icon: string; isDefault: boolean; createdAt: string | Date };
 type SettingsRow = { currentMonth: string; startBalance: string; editedBalance: string | null };
 type SnapshotRow = { id: string; accountBalance: string; debtBalance: string; netBalance: string; createdAt: string | Date };
 type OperationRow = {
@@ -25,6 +26,7 @@ type OperationRow = {
   note: string | null;
   plannedOperationId: string | null;
   seriesId: string | null;
+  categoryId: string | null;
   createdAt: string | Date;
 };
 type OperationEntryRow = { id: string; operationId: string; targetType: string; targetId: string; amount: string };
@@ -42,6 +44,7 @@ type PlannedOperationRow = {
   targetAccountId: string | null;
   targetDebtId: string | null;
   seriesId: string | null;
+  categoryId: string | null;
 };
 type PlanRow = {
   id: string;
@@ -52,6 +55,7 @@ type PlanRow = {
   actualDate: string | Date | null;
   status: string;
   note: string | null;
+  categoryId: string | null;
 };
 
 function iso(value: string | Date | null | undefined) {
@@ -77,6 +81,18 @@ function mapDebt(row: DebtRow) {
   return { id: row.id, name: row.name, amount: toMoney(row.amount), createdAt: iso(row.createdAt)! };
 }
 
+function mapCategory(row: CategoryRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type as CategoryType,
+    color: row.color,
+    icon: row.icon,
+    isDefault: Boolean(row.isDefault),
+    createdAt: iso(row.createdAt)!
+  };
+}
+
 export function mapIncome(row: PlanRow) {
   return {
     id: row.id,
@@ -87,7 +103,8 @@ export function mapIncome(row: PlanRow) {
     actualDate: iso(row.actualDate),
     effectiveDate: effectiveDate(row).toISOString(),
     status: row.status as IncomeStatus,
-    note: row.note
+    note: row.note,
+    categoryId: row.categoryId
   };
 }
 
@@ -101,7 +118,8 @@ export function mapPayment(row: PlanRow) {
     actualDate: iso(row.actualDate),
     effectiveDate: effectiveDate(row).toISOString(),
     status: row.status as PaymentStatus,
-    note: row.note
+    note: row.note,
+    categoryId: row.categoryId
   };
 }
 
@@ -127,6 +145,7 @@ function mapOperation(row: OperationRow, entries: OperationEntryRow[]) {
     plannedOperationId: row.plannedOperationId,
     seriesId: row.seriesId,
     createdAt: iso(row.createdAt)!,
+    categoryId: row.categoryId,
     entries: entries
       .filter((entry) => entry.operationId === row.id)
       .map((entry) => ({
@@ -153,7 +172,8 @@ function mapPlannedOperation(row: PlannedOperationRow) {
     sourceAccountId: row.sourceAccountId,
     targetAccountId: row.targetAccountId,
     targetDebtId: row.targetDebtId,
-    seriesId: row.seriesId
+    seriesId: row.seriesId,
+    categoryId: row.categoryId
   };
 }
 
@@ -194,16 +214,18 @@ function calculateBalances(input: {
 }
 
 export async function dashboardState(env: WorkerEnv, userId: string): Promise<DashboardStateDto> {
+  await ensureDefaultCategories(env, userId);
   const db = sql(env);
-  const [users, accounts, debts, income, payments, operations, operationEntries, plannedOperations, settingsRows, snapshots] = await Promise.all([
+  const [users, accounts, debts, categories, income, payments, operations, operationEntries, plannedOperations, settingsRows, snapshots] = await Promise.all([
     db`SELECT id, "telegramId", username, "firstName", "createdAt" FROM "User" WHERE id = ${userId} LIMIT 1`,
     db`SELECT id, name, balance, "createdAt" FROM "Account" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
     db`SELECT id, name, amount, "createdAt" FROM "Debt" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
-    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note FROM "Income" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
-    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note FROM "Payment" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
-    db`SELECT id, kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt" FROM "Operation" WHERE "userId" = ${userId} ORDER BY "operationDate" DESC LIMIT 100`,
+    db`SELECT id, name, type, color, icon, "isDefault", "createdAt" FROM "Category" WHERE "userId" = ${userId} ORDER BY "isDefault" DESC, "createdAt" ASC`,
+    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId" FROM "Income" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
+    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId" FROM "Payment" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
+    db`SELECT id, kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "categoryId", "createdAt" FROM "Operation" WHERE "userId" = ${userId} ORDER BY "operationDate" DESC LIMIT 100`,
     db`SELECT id, "operationId", "targetType", "targetId", amount FROM "OperationEntry" WHERE "operationId" IN (SELECT id FROM "Operation" WHERE "userId" = ${userId} ORDER BY "operationDate" DESC LIMIT 100)`,
-    db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
+    db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId" FROM "PlannedOperation" WHERE "userId" = ${userId} ORDER BY "plannedDate" ASC`,
     db`SELECT "currentMonth", "startBalance", "editedBalance" FROM "Settings" WHERE "userId" = ${userId} LIMIT 1`,
     db`SELECT id, "accountBalance", "debtBalance", "netBalance", "createdAt" FROM "BalanceSnapshot" WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT 1`
   ]);
@@ -276,6 +298,7 @@ export async function dashboardState(env: WorkerEnv, userId: string): Promise<Da
     upcoming,
     accounts: (accounts as AccountRow[]).map(mapAccount),
     debts: (debts as DebtRow[]).map(mapDebt),
+    categories: (categories as CategoryRow[]).map(mapCategory),
     income: (income as PlanRow[]).map(mapIncome),
     payments: (payments as PlanRow[]).map(mapPayment),
     operations: (operations as OperationRow[]).map((row) => mapOperation(row, operationEntries as OperationEntryRow[])),
@@ -293,6 +316,59 @@ export async function createAccount(env: WorkerEnv, userId: string, body: unknow
     RETURNING id, name, balance, "createdAt"
   `;
   return mapAccount(rows[0] as AccountRow);
+}
+
+export async function ensureDefaultCategories(env: WorkerEnv, userId: string) {
+  const db = sql(env);
+  for (const category of DEFAULT_CATEGORIES) {
+    await db`
+      INSERT INTO "Category" (id, "userId", name, type, color, icon, "isDefault", "createdAt")
+      VALUES (${id()}, ${userId}, ${category.name}, ${category.type}::"CategoryType", ${category.color}, ${category.icon}, ${category.isDefault}, NOW())
+      ON CONFLICT ("userId", name, type) DO NOTHING
+    `;
+  }
+}
+
+export async function listCategories(env: WorkerEnv, userId: string) {
+  await ensureDefaultCategories(env, userId);
+  const rows = await sql(env)`SELECT id, name, type, color, icon, "isDefault", "createdAt" FROM "Category" WHERE "userId" = ${userId} ORDER BY "isDefault" DESC, "createdAt" ASC`;
+  return (rows as CategoryRow[]).map(mapCategory);
+}
+
+export async function createCategory(env: WorkerEnv, userId: string, body: unknown) {
+  const input = categoryInputSchema.parse(body);
+  const rows = await sql(env)`
+    INSERT INTO "Category" (id, "userId", name, type, color, icon, "isDefault", "createdAt")
+    VALUES (${id()}, ${userId}, ${input.name}, ${input.type}::"CategoryType", ${input.color}, ${input.icon}, ${input.isDefault}, NOW())
+    RETURNING id, name, type, color, icon, "isDefault", "createdAt"
+  `;
+  return mapCategory(rows[0] as CategoryRow);
+}
+
+export async function updateCategory(env: WorkerEnv, userId: string, categoryId: string, body: unknown) {
+  const input = categoryInputSchema.partial().parse(body);
+  const rows = await sql(env)`
+    UPDATE "Category"
+    SET name = COALESCE(${input.name ?? null}, name),
+        type = COALESCE(${input.type ?? null}::"CategoryType", type),
+        color = COALESCE(${input.color ?? null}, color),
+        icon = COALESCE(${input.icon ?? null}, icon),
+        "isDefault" = COALESCE(${input.isDefault ?? null}, "isDefault")
+    WHERE id = ${categoryId} AND "userId" = ${userId}
+    RETURNING id, name, type, color, icon, "isDefault", "createdAt"
+  `;
+  return rows[0] ? mapCategory(rows[0] as CategoryRow) : null;
+}
+
+export async function deleteCategory(env: WorkerEnv, userId: string, categoryId: string) {
+  await sql(env)`DELETE FROM "Category" WHERE id = ${categoryId} AND "userId" = ${userId}`;
+  return { ok: true };
+}
+
+async function ensureCategoryBelongsToUser(env: WorkerEnv, userId: string, categoryId?: string | null) {
+  if (!categoryId) return;
+  const rows = await sql(env)`SELECT id FROM "Category" WHERE id = ${categoryId} AND "userId" = ${userId} LIMIT 1`;
+  if (!rows[0]) throw new Error("Category not found");
 }
 
 export async function deleteAccount(env: WorkerEnv, userId: string, accountId: string) {
@@ -318,24 +394,139 @@ export async function deleteDebt(env: WorkerEnv, userId: string, debtId: string)
 export async function reconcile(env: WorkerEnv, userId: string, body: unknown) {
   const input = reconcileSchema.parse(body);
   const db = sql(env);
+  await ensureDefaultCategories(env, userId);
+  const snapshotId = id();
+  const snapshotCreatedAt = new Date().toISOString();
+  const [accountRows, debtRows, settingsRows, incomeRows, paymentRows, plannedOperationRows, previousSnapshots, categories] = await Promise.all([
+    db`SELECT id, name, balance, "createdAt" FROM "Account" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
+    db`SELECT id, name, amount, "createdAt" FROM "Debt" WHERE "userId" = ${userId} ORDER BY "createdAt" ASC`,
+    db`SELECT "currentMonth", "startBalance", "editedBalance" FROM "Settings" WHERE "userId" = ${userId} LIMIT 1`,
+    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId" FROM "Income" WHERE "userId" = ${userId}`,
+    db`SELECT id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId" FROM "Payment" WHERE "userId" = ${userId}`,
+    db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId" FROM "PlannedOperation" WHERE "userId" = ${userId}`,
+    db`SELECT id, "accountBalance", "debtBalance", "netBalance", "createdAt" FROM "BalanceSnapshot" WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT 1`,
+    db`SELECT id FROM "Category" WHERE "userId" = ${userId} AND name = 'Нераспределено' LIMIT 1`
+  ]);
+
+  const accountUpdates = new Map(input.accounts.map((account) => [account.id, account.balance]));
+  const debtUpdates = new Map(input.debts.map((debt) => [debt.id, String(normalizeDebtAmount(debt.amount))]));
+  const knownAccountIds = new Set((accountRows as AccountRow[]).map((account) => account.id));
+  const knownDebtIds = new Set((debtRows as DebtRow[]).map((debt) => debt.id));
   for (const account of input.accounts) {
-    await db`UPDATE "Account" SET balance = ${account.balance} WHERE id = ${account.id} AND "userId" = ${userId}`;
+    if (!knownAccountIds.has(account.id)) throw new Error("Account not found");
   }
   for (const debt of input.debts) {
-    await db`UPDATE "Debt" SET amount = ${String(normalizeDebtAmount(debt.amount))} WHERE id = ${debt.id} AND "userId" = ${userId}`;
+    if (!knownDebtIds.has(debt.id)) throw new Error("Debt not found");
   }
-  if (input.editedBalance !== undefined) {
-    await db`UPDATE "Settings" SET "editedBalance" = ${input.editedBalance ?? null} WHERE "userId" = ${userId}`;
-  }
-  const state = await dashboardState(env, userId);
-  await db`
-    INSERT INTO "BalanceSnapshot" (id, "userId", "accountBalance", "debtBalance", "netBalance", "createdAt")
-    VALUES (${id()}, ${userId}, ${state.balances.accountBalance}, ${state.balances.debtBalance}, ${state.balances.netBalance}, NOW())
-  `;
-  await db`
-    INSERT INTO "History" (id, "userId", type, payload, "createdAt")
-    VALUES (${id()}, ${userId}, 'balance_reconciled', ${JSON.stringify({ balances: state.balances })}, NOW())
-  `;
+
+  const finalAccounts = (accountRows as AccountRow[]).map((account) => ({
+    ...account,
+    balance: accountUpdates.get(account.id) ?? account.balance
+  }));
+  const finalDebts = (debtRows as DebtRow[]).map((debt) => ({
+    ...debt,
+    amount: debtUpdates.get(debt.id) ?? debt.amount
+  }));
+  const settings = (settingsRows[0] ?? { currentMonth: currentMonth(), startBalance: "0", editedBalance: null }) as SettingsRow;
+  const settingsForSummary: SettingsRow = {
+    ...settings,
+    editedBalance: input.editedBalance !== undefined ? input.editedBalance ?? null : settings.editedBalance
+  };
+  const rawBalances = calculateBalances({
+    settings: settingsForSummary,
+    accounts: finalAccounts,
+    debts: finalDebts,
+    income: incomeRows as PlanRow[],
+    payments: paymentRows as PlanRow[],
+    plannedOperations: plannedOperationRows as PlannedOperationRow[]
+  });
+  const nextSnapshot = {
+    id: snapshotId,
+    accountBalance: toMoney(rawBalances.accountBalance),
+    debtBalance: toMoney(rawBalances.debtBalance),
+    netBalance: toMoney(rawBalances.netBalance),
+    createdAt: snapshotCreatedAt
+  };
+  const previousSnapshot = previousSnapshots[0] as SnapshotRow | undefined;
+  const fixedRows = previousSnapshot
+    ? await db`
+        SELECT kind, amount
+        FROM "Operation"
+        WHERE "userId" = ${userId}
+          AND kind <> 'unallocated'::"OperationKind"
+          AND "operationDate" > ${new Date(previousSnapshot.createdAt).toISOString()}
+          AND "operationDate" <= ${snapshotCreatedAt}
+      `
+    : [];
+  const snapshotDelta = previousSnapshot ? rawBalances.netBalance - toNumber(previousSnapshot.netBalance) : 0;
+  const fixedDelta = fixedRows.reduce((sum: number, row: any) => sum + operationNetDelta(row.kind, toNumber(row.amount)), 0);
+  const unallocatedDelta = snapshotDelta - fixedDelta;
+  const distributedMovement =
+    previousSnapshot && Math.abs(unallocatedDelta) > 0.009
+      ? distributeUnallocatedMovement({
+          amount: unallocatedDelta,
+          from: new Date(previousSnapshot.createdAt).toISOString(),
+          to: snapshotCreatedAt
+        })
+      : [];
+  const payload = JSON.stringify({
+    previousSnapshot: previousSnapshot ? mapSnapshot(previousSnapshot) : null,
+    nextSnapshot,
+    snapshotDelta: previousSnapshot ? toMoney(snapshotDelta) : toMoney(0),
+    calculatedBalance: toMoney(rawBalances.calculatedBalance),
+    currentBalance: toMoney(rawBalances.currentBalance),
+    additionalExpenses: toMoney(rawBalances.additionalExpenses),
+    distributedMovement: previousSnapshot ? toMoney(unallocatedDelta) : toMoney(0)
+  });
+
+  await db.transaction((tx) => {
+    const queries: any[] = [];
+    for (const account of input.accounts) {
+      queries.push(tx`
+        WITH updated AS (
+          UPDATE "Account"
+          SET balance = ${account.balance}
+          WHERE id = ${account.id} AND "userId" = ${userId}
+          RETURNING id
+        )
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN 1 ELSE 1 / 0 END AS ok
+      `);
+    }
+    for (const debt of input.debts) {
+      queries.push(tx`
+        WITH updated AS (
+          UPDATE "Debt"
+          SET amount = ${String(normalizeDebtAmount(debt.amount))}
+          WHERE id = ${debt.id} AND "userId" = ${userId}
+          RETURNING id
+        )
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN 1 ELSE 1 / 0 END AS ok
+      `);
+    }
+    if (input.editedBalance !== undefined) {
+      queries.push(tx`
+        INSERT INTO "Settings" ("userId", "currentMonth", "startBalance", "editedBalance")
+        VALUES (${userId}, ${settings.currentMonth}, ${settings.startBalance}, ${input.editedBalance ?? null})
+        ON CONFLICT ("userId") DO UPDATE SET "editedBalance" = EXCLUDED."editedBalance"
+      `);
+    }
+    queries.push(tx`
+      INSERT INTO "BalanceSnapshot" (id, "userId", "accountBalance", "debtBalance", "netBalance", "createdAt")
+      VALUES (${snapshotId}, ${userId}, ${nextSnapshot.accountBalance}, ${nextSnapshot.debtBalance}, ${nextSnapshot.netBalance}, ${snapshotCreatedAt})
+    `);
+    const categoryId = categories[0]?.id ?? null;
+    for (const item of distributedMovement) {
+      queries.push(tx`
+        INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "categoryId", "createdAt")
+        VALUES (${id()}, ${userId}, 'unallocated'::"OperationKind", ${unallocatedDelta < 0 ? "Нераспределённые расходы" : "Дополнительные доходы"}, ${item.amount}, ${new Date(item.date).toISOString()}, 'Создано автоматически при сверке остатков', ${categoryId}, NOW())
+      `);
+    }
+    queries.push(tx`
+      INSERT INTO "History" (id, "userId", type, payload, "createdAt")
+      VALUES (${id()}, ${userId}, 'balance_reconciled', ${payload}, NOW())
+    `);
+    return queries;
+  });
   return dashboardState(env, userId);
 }
 
@@ -344,56 +535,116 @@ export async function history(env: WorkerEnv, userId: string): Promise<HistoryIt
   return rows.map((row: any) => ({ id: row.id, type: row.type, payload: row.payload, createdAt: iso(row.createdAt)! }));
 }
 
-export async function timeseries(env: WorkerEnv, userId: string): Promise<TimeseriesPointDto[]> {
-  const rows = await sql(env)`
+const workerPeriodDays = {
+  week: 7,
+  month: 31,
+  quarter: 92,
+  year: 366
+};
+
+export async function timeseries(env: WorkerEnv, userId: string, period: keyof typeof workerPeriodDays = "month"): Promise<TimeseriesPointDto[]> {
+  const from = new Date();
+  from.setDate(from.getDate() - workerPeriodDays[period]);
+  const db = sql(env);
+  const rows = await db`
     SELECT "createdAt", "accountBalance", "debtBalance", "netBalance"
     FROM "BalanceSnapshot"
     WHERE "userId" = ${userId}
+      AND "createdAt" >= ${from.toISOString()}
     ORDER BY "createdAt" ASC
     LIMIT 365
   `;
-  return rows.map((row: any) => ({
-    date: iso(row.createdAt)!,
-    accountBalance: toNumber(row.accountBalance),
-    debtBalance: toNumber(row.debtBalance),
-    netBalance: toNumber(row.netBalance),
-    additionalExpenses: 0
-  }));
+  const previousRows = await db`
+    SELECT "createdAt", "accountBalance", "debtBalance", "netBalance"
+    FROM "BalanceSnapshot"
+    WHERE "userId" = ${userId}
+      AND "createdAt" < ${from.toISOString()}
+    ORDER BY "createdAt" DESC
+    LIMIT 1
+  `;
+  const unallocated = await db`
+    SELECT "operationDate", amount
+    FROM "Operation"
+    WHERE "userId" = ${userId} AND kind = 'unallocated'::"OperationKind"
+      AND "operationDate" >= ${from.toISOString()}
+    ORDER BY "operationDate" ASC
+    LIMIT 365
+  `;
+  const unallocatedByDate = unallocated.reduce<Record<string, number>>((acc: Record<string, number>, row: any) => {
+    const date = iso(row.operationDate)!.slice(0, 10);
+    acc[date] = (acc[date] ?? 0) + toNumber(row.amount);
+    return acc;
+  }, {});
+  const snapshotsByDate = rows.reduce<Record<string, any>>((acc: Record<string, any>, row: any) => {
+    acc[iso(row.createdAt)!.slice(0, 10)] = row;
+    return acc;
+  }, {});
+  const dates = [...new Set([...Object.keys(snapshotsByDate), ...Object.keys(unallocatedByDate)])].sort();
+  const previousSnapshot = previousRows[0] as SnapshotRow | undefined;
+  let lastBalances = previousSnapshot
+    ? {
+        accountBalance: toNumber(previousSnapshot.accountBalance),
+        debtBalance: toNumber(previousSnapshot.debtBalance),
+        netBalance: toNumber(previousSnapshot.netBalance)
+      }
+    : { netBalance: 0, accountBalance: 0, debtBalance: 0 };
+
+  return dates.map((date) => {
+    const snapshot = snapshotsByDate[date];
+    if (snapshot) {
+      lastBalances = {
+        accountBalance: toNumber(snapshot.accountBalance),
+        debtBalance: toNumber(snapshot.debtBalance),
+        netBalance: toNumber(snapshot.netBalance)
+      };
+    }
+    return {
+      date,
+      ...lastBalances,
+      additionalExpenses: unallocatedByDate[date] ?? 0
+    };
+  });
 }
 
 export async function createPlannedOperation(env: WorkerEnv, userId: string, body: unknown) {
   const input = plannedOperationInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
+  await validateDebtRepaymentPlan(env, userId, input);
   const rows = await sql(env)`
-    INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "createdAt")
-    VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${input.seriesId ?? null}, NOW())
-    RETURNING id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId"
+    INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId", "createdAt")
+    VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${input.seriesId ?? null}, ${input.categoryId ?? null}, NOW())
+    RETURNING id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId"
   `;
   return mapPlannedOperation(rows[0] as PlannedOperationRow);
 }
 
 export async function createPlannedOperationSeries(env: WorkerEnv, userId: string, body: unknown) {
   const input = plannedOperationSeriesInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
+  const schedule = generateMonthlySchedule({ startDate: input.startDate, count: input.count, amount: input.amount, finalAmount: input.finalAmount });
+  const totalAmount = schedule.reduce((sum, item) => sum + toNumber(item.amount), 0).toFixed(2);
+  await validateDebtRepaymentPlan(env, userId, input, totalAmount);
   const seriesId = id();
   const db = sql(env);
   await db`
-    INSERT INTO "OperationSeries" (id, "userId", name, kind, "defaultAmount", "finalAmount", "startDate", count, "sourceAccountId", "targetAccountId", "targetDebtId", "createdAt")
-    VALUES (${seriesId}, ${userId}, ${input.name}, ${input.kind}::"OperationKind", ${input.amount}, ${input.finalAmount ?? null}, ${new Date(input.startDate).toISOString()}, ${input.count}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, NOW())
+    INSERT INTO "OperationSeries" (id, "userId", name, kind, "defaultAmount", "finalAmount", "startDate", count, "sourceAccountId", "targetAccountId", "targetDebtId", "categoryId", "createdAt")
+    VALUES (${seriesId}, ${userId}, ${input.name}, ${input.kind}::"OperationKind", ${input.amount}, ${input.finalAmount ?? null}, ${new Date(input.startDate).toISOString()}, ${input.count}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${input.categoryId ?? null}, NOW())
   `;
 
-  for (const item of generateMonthlySchedule({ startDate: input.startDate, count: input.count, amount: input.amount, finalAmount: input.finalAmount })) {
+  for (const item of schedule) {
     await db`
-      INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "createdAt")
-      VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${item.amount}, ${new Date(item.plannedDate).toISOString()}, 'planned'::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${seriesId}, NOW())
+      INSERT INTO "PlannedOperation" (id, "userId", kind, name, amount, "plannedDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId", "createdAt")
+      VALUES (${id()}, ${userId}, ${input.kind}::"OperationKind", ${input.name}, ${item.amount}, ${new Date(item.plannedDate).toISOString()}, 'planned'::"PlannedOperationStatus", ${input.note ?? null}, ${input.sourceAccountId ?? null}, ${input.targetAccountId ?? null}, ${input.targetDebtId ?? null}, ${seriesId}, ${input.categoryId ?? null}, NOW())
     `;
   }
 
-  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE "seriesId" = ${seriesId} ORDER BY "plannedDate" ASC`;
+  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId" FROM "PlannedOperation" WHERE "seriesId" = ${seriesId} ORDER BY "plannedDate" ASC`;
   return rows.map((row: any) => mapPlannedOperation(row as PlannedOperationRow));
 }
 
 export async function markPlannedOperationDone(env: WorkerEnv, userId: string, operationId: string, actualDateInput?: string) {
   const db = sql(env);
-  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId" FROM "PlannedOperation" WHERE id = ${operationId} AND "userId" = ${userId} LIMIT 1`;
+  const rows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId" FROM "PlannedOperation" WHERE id = ${operationId} AND "userId" = ${userId} LIMIT 1`;
   const planned = rows[0] as PlannedOperationRow | undefined;
   if (!planned) throw new Error("Planned operation not found");
   if (planned.status === PlannedOperationStatus.done) return mapPlannedOperation(planned);
@@ -417,32 +668,58 @@ export async function markPlannedOperationDone(env: WorkerEnv, userId: string, o
     const target =
       entry.targetType === "account"
         ? await db`SELECT id FROM "Account" WHERE id = ${entry.targetId} AND "userId" = ${userId} LIMIT 1`
-        : await db`SELECT id FROM "Debt" WHERE id = ${entry.targetId} AND "userId" = ${userId} LIMIT 1`;
+        : await db`SELECT id, amount FROM "Debt" WHERE id = ${entry.targetId} AND "userId" = ${userId} LIMIT 1`;
     if (!target[0]) throw new Error(`${entry.targetType === "account" ? "Account" : "Debt"} not found for planned operation`);
+    if (entry.targetType === "debt") assertDebtRepaymentDoesNotOverpay(entry.amount, target[0].amount);
   }
 
-  await db`
-    INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "createdAt")
-    VALUES (${createdOperationId}, ${userId}, ${planned.kind}::"OperationKind", ${planned.name}, ${planned.amount}, ${actualDate}, ${planned.note}, ${planned.id}, ${planned.seriesId}, NOW())
-  `;
+  await db.transaction((tx) => {
+    const queries = [
+      tx`
+        INSERT INTO "Operation" (id, "userId", kind, name, amount, "operationDate", note, "plannedOperationId", "seriesId", "categoryId", "createdAt")
+        VALUES (${createdOperationId}, ${userId}, ${planned.kind}::"OperationKind", ${planned.name}, ${planned.amount}, ${actualDate}, ${planned.note}, ${planned.id}, ${planned.seriesId}, ${planned.categoryId}, NOW())
+      `
+    ];
 
-  for (const entry of entries) {
-    await db`INSERT INTO "OperationEntry" (id, "operationId", "targetType", "targetId", amount, "createdAt") VALUES (${id()}, ${createdOperationId}, ${entry.targetType}, ${entry.targetId}, ${entry.amount}, NOW())`;
-    if (entry.targetType === "account") {
-      const updatedAccounts = await db`UPDATE "Account" SET balance = balance + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId} RETURNING id`;
-      if (!updatedAccounts[0]) throw new Error("Account not found for planned operation");
-    } else {
-      const updatedDebts = await db`UPDATE "Debt" SET amount = amount + ${entry.amount} WHERE id = ${entry.targetId} AND "userId" = ${userId} RETURNING id`;
-      if (!updatedDebts[0]) throw new Error("Debt not found for planned operation");
+    for (const entry of entries) {
+      queries.push(tx`INSERT INTO "OperationEntry" (id, "operationId", "targetType", "targetId", amount, "createdAt") VALUES (${id()}, ${createdOperationId}, ${entry.targetType}, ${entry.targetId}, ${entry.amount}, NOW())`);
+      if (entry.targetType === "account") {
+        queries.push(tx`
+          WITH updated AS (
+            UPDATE "Account"
+            SET balance = balance + ${entry.amount}
+            WHERE id = ${entry.targetId} AND "userId" = ${userId}
+            RETURNING id
+          )
+          SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN 1 ELSE 1 / 0 END AS ok
+        `);
+      } else {
+        queries.push(tx`
+          WITH updated AS (
+            UPDATE "Debt"
+            SET amount = amount + ${entry.amount}
+            WHERE id = ${entry.targetId} AND "userId" = ${userId} AND amount <= ${(-Number(entry.amount)).toFixed(2)}
+            RETURNING id
+          )
+          SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN 1 ELSE 1 / 0 END AS ok
+        `);
+      }
     }
-  }
 
-  const updatedRows = await db`
-    UPDATE "PlannedOperation"
-    SET status = 'done'::"PlannedOperationStatus", "actualDate" = ${actualDate}
-    WHERE id = ${planned.id} AND "userId" = ${userId}
-    RETURNING id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId"
-  `;
+    queries.push(tx`
+      WITH updated AS (
+        UPDATE "PlannedOperation"
+        SET status = 'done'::"PlannedOperationStatus", "actualDate" = ${actualDate}
+        WHERE id = ${planned.id} AND "userId" = ${userId}
+        RETURNING id
+      )
+      SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN 1 ELSE 1 / 0 END AS ok
+    `);
+
+    return queries;
+  });
+
+  const updatedRows = await db`SELECT id, kind, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "sourceAccountId", "targetAccountId", "targetDebtId", "seriesId", "categoryId" FROM "PlannedOperation" WHERE id = ${planned.id} AND "userId" = ${userId} LIMIT 1`;
   return mapPlannedOperation(updatedRows[0] as PlannedOperationRow);
 }
 
@@ -451,23 +728,60 @@ export async function deletePlannedOperation(env: WorkerEnv, userId: string, pla
   return { ok: true };
 }
 
+async function validateDebtRepaymentPlan(
+  env: WorkerEnv,
+  userId: string,
+  input: { kind: string; amount: string; sourceAccountId?: string | null; targetDebtId?: string | null },
+  totalAmount = input.amount
+) {
+  if (input.kind !== OperationKind.debt_repayment) return;
+  if (!input.sourceAccountId || !input.targetDebtId) throw new Error("Для погашения долга нужны счёт списания и долговой счёт");
+
+  const db = sql(env);
+  const [accounts, debts] = await Promise.all([
+    db`SELECT id FROM "Account" WHERE id = ${input.sourceAccountId} AND "userId" = ${userId} LIMIT 1`,
+    db`SELECT amount FROM "Debt" WHERE id = ${input.targetDebtId} AND "userId" = ${userId} LIMIT 1`
+  ]);
+  if (!accounts[0]) throw new Error("Account not found for planned operation");
+  if (!debts[0]) throw new Error("Debt not found for planned operation");
+  assertDebtRepaymentDoesNotOverpay(totalAmount, debts[0].amount);
+}
+
+function assertDebtRepaymentDoesNotOverpay(amountInput: string | number, debtAmountInput: string | number | undefined) {
+  const amount = Number(amountInput);
+  const debtAmount = Math.abs(Number(debtAmountInput));
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error("Сумма погашения должна быть больше нуля");
+  if (!Number.isFinite(debtAmount)) throw new Error("Некорректный остаток долга");
+  if (amount > debtAmount + 0.009) throw new Error("Сумма погашения больше текущего долга");
+}
+
+function operationNetDelta(kind: string, amount: number) {
+  if (kind === OperationKind.income) return amount;
+  if (kind === OperationKind.expense) return -amount;
+  if (kind === OperationKind.unallocated) return amount;
+  return 0;
+}
+
 function dateOrNull(value: string | null | undefined) {
   return value ? new Date(value).toISOString() : null;
 }
 
 export async function createIncome(env: WorkerEnv, userId: string, body: unknown) {
   const input = incomeInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
   const rows = await sql(env)`
-    INSERT INTO "Income" (id, "userId", name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "createdAt")
-    VALUES (${id()}, ${userId}, ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"IncomeStatus", ${input.note ?? null}, NOW())
-    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note
+    INSERT INTO "Income" (id, "userId", name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId", "createdAt")
+    VALUES (${id()}, ${userId}, ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"IncomeStatus", ${input.note ?? null}, ${input.categoryId ?? null}, NOW())
+    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"
   `;
   return mapIncome(rows[0] as PlanRow);
 }
 
 export async function updateIncome(env: WorkerEnv, userId: string, incomeId: string, body: unknown) {
   const input = incomeInputSchema.partial().parse(body);
-  const rows = await sql(env)`
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
+  const db = sql(env);
+  let rows = await db`
     UPDATE "Income"
     SET name = COALESCE(${input.name ?? null}, name),
         amount = COALESCE(${input.amount ?? null}, amount),
@@ -477,8 +791,11 @@ export async function updateIncome(env: WorkerEnv, userId: string, incomeId: str
         status = COALESCE(${input.status ?? null}::"IncomeStatus", status),
         note = COALESCE(${input.note ?? null}, note)
     WHERE id = ${incomeId} AND "userId" = ${userId}
-    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note
+    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"
   `;
+  if (input.categoryId !== undefined) {
+    rows = await db`UPDATE "Income" SET "categoryId" = ${input.categoryId ?? null} WHERE id = ${incomeId} AND "userId" = ${userId} RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"`;
+  }
   return rows[0] ? mapIncome(rows[0] as PlanRow) : null;
 }
 
@@ -489,17 +806,20 @@ export async function deleteIncome(env: WorkerEnv, userId: string, incomeId: str
 
 export async function createPayment(env: WorkerEnv, userId: string, body: unknown) {
   const input = paymentInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
   const rows = await sql(env)`
-    INSERT INTO "Payment" (id, "userId", name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "createdAt")
-    VALUES (${id()}, ${userId}, ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"PaymentStatus", ${input.note ?? null}, NOW())
-    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note
+    INSERT INTO "Payment" (id, "userId", name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId", "createdAt")
+    VALUES (${id()}, ${userId}, ${input.name}, ${input.amount}, ${new Date(input.plannedDate).toISOString()}, ${dateOrNull(input.expectedDate ?? null)}, ${dateOrNull(input.actualDate ?? null)}, ${input.status}::"PaymentStatus", ${input.note ?? null}, ${input.categoryId ?? null}, NOW())
+    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"
   `;
   return mapPayment(rows[0] as PlanRow);
 }
 
 export async function updatePayment(env: WorkerEnv, userId: string, paymentId: string, body: unknown) {
   const input = paymentInputSchema.partial().parse(body);
-  const rows = await sql(env)`
+  await ensureCategoryBelongsToUser(env, userId, input.categoryId);
+  const db = sql(env);
+  let rows = await db`
     UPDATE "Payment"
     SET name = COALESCE(${input.name ?? null}, name),
         amount = COALESCE(${input.amount ?? null}, amount),
@@ -509,8 +829,11 @@ export async function updatePayment(env: WorkerEnv, userId: string, paymentId: s
         status = COALESCE(${input.status ?? null}::"PaymentStatus", status),
         note = COALESCE(${input.note ?? null}, note)
     WHERE id = ${paymentId} AND "userId" = ${userId}
-    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note
+    RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"
   `;
+  if (input.categoryId !== undefined) {
+    rows = await db`UPDATE "Payment" SET "categoryId" = ${input.categoryId ?? null} WHERE id = ${paymentId} AND "userId" = ${userId} RETURNING id, name, amount, "plannedDate", "expectedDate", "actualDate", status, note, "categoryId"`;
+  }
   return rows[0] ? mapPayment(rows[0] as PlanRow) : null;
 }
 

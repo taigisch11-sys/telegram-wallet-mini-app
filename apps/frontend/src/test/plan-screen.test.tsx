@@ -66,6 +66,28 @@ describe("PlanScreen", () => {
     expect(screen.getByText("22.03.2027")).toBeInTheDocument();
   });
 
+  it("lets the user choose an optional category for a fixed payment", async () => {
+    render(
+      <PlanHarness
+        initialState={{
+          ...emptyState,
+          categories: [
+            { id: "cat-food", name: "Еда", type: "expense", color: "#ffb84d", icon: "basket", isDefault: true, createdAt: new Date().toISOString() },
+            { id: "cat-credit", name: "Кредиты", type: "expense", color: "#5b8cff", icon: "credit-card", isDefault: true, createdAt: new Date().toISOString() }
+          ]
+        }}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Название платежа"), { target: { value: "Платёж по кредиту" } });
+    fireEvent.change(screen.getByLabelText("Сумма платежа"), { target: { value: "10000" } });
+    fireEvent.change(screen.getByLabelText("Категория платежа"), { target: { value: "cat-credit" } });
+    fireEvent.click(screen.getByLabelText("Добавить платёж"));
+
+    expect(await screen.findByText("Платёж по кредиту")).toBeInTheDocument();
+    expect(screen.getByText("Кредиты")).toBeInTheDocument();
+  });
+
   it("marks a debt repayment as an account transfer instead of an expense", async () => {
     render(
       <PlanHarness

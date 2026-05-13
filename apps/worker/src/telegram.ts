@@ -4,6 +4,8 @@ export type TelegramAuthUser = {
   first_name?: string;
 };
 
+const telegramAuthMaxAgeSeconds = 24 * 60 * 60;
+
 function hex(bytes: ArrayBuffer) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -36,8 +38,17 @@ export async function verifyTelegramInitData(initData: string, botToken: string)
   const secret = await hmac(bytes("WebAppData"), botToken);
   const calculated = hex(await hmac(secret, dataCheckString));
   if (calculated !== hash) throw new Error("Telegram signature is invalid");
+  assertFreshAuthDate(params.get("auth_date"));
 
   const userJson = params.get("user");
   if (!userJson) throw new Error("Telegram user is missing");
   return JSON.parse(userJson) as TelegramAuthUser;
+}
+
+function assertFreshAuthDate(value: string | null) {
+  const authDate = Number(value);
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(authDate) || now - authDate > telegramAuthMaxAgeSeconds || authDate - now > 60) {
+    throw new Error("Telegram auth data is expired");
+  }
 }

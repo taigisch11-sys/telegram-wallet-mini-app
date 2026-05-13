@@ -8,6 +8,7 @@ import { requireAuth } from "./middleware/auth";
 import { accountsRouter } from "./modules/accounts/accounts.controller";
 import { analyticsRouter } from "./modules/analytics/analytics.controller";
 import { authRouter } from "./modules/auth/auth.controller";
+import { categoriesRouter } from "./modules/categories/categories.controller";
 import { debtsRouter } from "./modules/debts/debts.controller";
 import { historyRouter } from "./modules/history/history.controller";
 import { incomeRouter } from "./modules/income/income.controller";
@@ -29,6 +30,7 @@ export function createApp(bot: TelegramBot | null = null) {
 
   app.use("/api/state", requireAuth, stateRouter);
   app.use("/api/accounts", requireAuth, accountsRouter);
+  app.use("/api/categories", requireAuth, categoriesRouter);
   app.use("/api/debts", requireAuth, debtsRouter);
   app.use("/api/income", requireAuth, incomeRouter);
   app.use("/api/payments", requireAuth, paymentsRouter);

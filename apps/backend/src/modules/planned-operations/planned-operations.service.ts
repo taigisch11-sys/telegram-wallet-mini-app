@@ -1,6 +1,7 @@
 import { generateMonthlySchedule, plannedOperationInputSchema, plannedOperationSeriesInputSchema } from "@wallet/shared";
 import { badRequest, notFound } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { ensureCategoryBelongsToUser } from "../categories/categories.service";
 import { mapPlannedOperation } from "../finance/finance-mappers";
 
 export async function listPlannedOperations(userId: string) {
@@ -9,6 +10,7 @@ export async function listPlannedOperations(userId: string) {
 
 export async function createPlannedOperation(userId: string, body: unknown) {
   const input = plannedOperationInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(userId, input.categoryId);
   await validateDebtRepaymentPlan(userId, input);
   const operation = await prisma.plannedOperation.create({
     data: {
@@ -24,7 +26,8 @@ export async function createPlannedOperation(userId: string, body: unknown) {
       sourceAccountId: input.sourceAccountId ?? null,
       targetAccountId: input.targetAccountId ?? null,
       targetDebtId: input.targetDebtId ?? null,
-      seriesId: input.seriesId ?? null
+      seriesId: input.seriesId ?? null,
+      categoryId: input.categoryId ?? null
     }
   });
   await prisma.history.create({ data: { userId, type: "planned_operation_created", payload: { id: operation.id, kind: operation.kind, amount: String(operation.amount) } } });
@@ -33,6 +36,7 @@ export async function createPlannedOperation(userId: string, body: unknown) {
 
 export async function createPlannedOperationSeries(userId: string, body: unknown) {
   const input = plannedOperationSeriesInputSchema.parse(body);
+  await ensureCategoryBelongsToUser(userId, input.categoryId);
   const schedule = generateMonthlySchedule({ startDate: input.startDate, count: input.count, amount: input.amount, finalAmount: input.finalAmount });
   const totalAmount = schedule.reduce((sum, item) => sum + Number(item.amount), 0).toFixed(2);
   await validateDebtRepaymentPlan(userId, input, totalAmount);
@@ -49,7 +53,8 @@ export async function createPlannedOperationSeries(userId: string, body: unknown
         count: input.count,
         sourceAccountId: input.sourceAccountId ?? null,
         targetAccountId: input.targetAccountId ?? null,
-        targetDebtId: input.targetDebtId ?? null
+        targetDebtId: input.targetDebtId ?? null,
+        categoryId: input.categoryId ?? null
       }
     });
 
@@ -65,7 +70,8 @@ export async function createPlannedOperationSeries(userId: string, body: unknown
         sourceAccountId: input.sourceAccountId ?? null,
         targetAccountId: input.targetAccountId ?? null,
         targetDebtId: input.targetDebtId ?? null,
-        seriesId: series.id
+        seriesId: series.id,
+        categoryId: input.categoryId ?? null
       }))
     });
 
@@ -115,6 +121,7 @@ export async function markPlannedOperationDone(userId: string, id: string, actua
         note: planned.note,
         plannedOperationId: planned.id,
         seriesId: planned.seriesId,
+        categoryId: planned.categoryId,
         entries: { create: entries }
       },
       include: { entries: true }

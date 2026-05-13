@@ -6,8 +6,9 @@ export type WorkerEnv = {
   TELEGRAM_WEBAPP_URL: string;
   FRONTEND_ORIGIN: string;
   DEV_AUTH_BYPASS?: string;
+  NODE_ENV?: string;
 };
 
 export function isDevAuthEnabled(env: WorkerEnv) {
-  return env.DEV_AUTH_BYPASS === "true";
+  return env.NODE_ENV === "development" && env.DEV_AUTH_BYPASS === "true";
 }

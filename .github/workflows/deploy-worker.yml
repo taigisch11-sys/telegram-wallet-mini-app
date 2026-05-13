@@ -8,6 +8,7 @@ on:
     paths:
       - "apps/worker/**"
       - "packages/shared/**"
+      - "prisma/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/deploy-worker.yml"

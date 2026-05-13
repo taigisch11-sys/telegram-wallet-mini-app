@@ -1,4 +1,4 @@
-import type { DashboardStateDto } from "@wallet/shared";
+import { distributeUnallocatedMovement, type DashboardStateDto } from "@wallet/shared";
 import { ArrowDownLeft, ArrowUpRight, Blend, CheckCircle2 } from "lucide-react";
 import { money, shortDate } from "../../lib/format";
 
@@ -23,7 +23,18 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
       ];
   const fixedItems = [...operationItems, ...legacyItems].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const additional = Number(state.balances.additionalExpenses);
-  const hasDistributedMovement = Math.abs(additional) > 0.009;
+  const hasPersistedUnallocated = state.operations.some((item) => item.kind === "unallocated");
+  const distribution = !hasPersistedUnallocated && Math.abs(additional) > 0.009
+    ? distributeUnallocatedMovement({
+        amount: additional,
+        to: state.latestSnapshot?.createdAt ?? new Date().toISOString(),
+        maxDays: 31
+      })
+    : [];
+  const hasDistributedMovement = distribution.length > 0;
+  const dailyAmount = distribution[0]?.amount ?? "0.00";
+  const distributedTitle = additional < 0 ? "Нераспределённые расходы" : "Дополнительные доходы";
+  const distributedSummary = `${distribution.length} ${dayWord(distribution.length)} по ${money(dailyAmount)}`;
 
   if (fixedItems.length === 0 && !hasDistributedMovement) return null;
 
@@ -40,7 +51,7 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
               {item.kind === "income" ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[18px] font-extrabold text-white">{item.title}</p>
+              <p className="line-clamp-2 text-[18px] font-extrabold leading-snug text-white">{item.title}</p>
               <p className="text-[14px] font-semibold text-[#9a9aa0]">
                 <span>{item.label}</span>
                 <span> • {shortDate(item.date)}</span>
@@ -56,8 +67,11 @@ export function FinanceTimeline({ state }: { state: DashboardStateDto }) {
               <Blend size={24} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[18px] font-extrabold text-white">Нераспределённое движение</p>
-              <p className="text-[14px] font-semibold text-[#9a9aa0]">Распределяется между сверками</p>
+              <p className="line-clamp-2 text-[18px] font-extrabold leading-snug text-white">{distributedTitle}</p>
+              <p className="text-[14px] font-semibold text-[#9a9aa0]">
+                <span>{distributedSummary}</span>
+                <span className="sr-only">Распределяется между сверками</span>
+              </p>
             </div>
             <div className="text-right">
               <p className={`text-[17px] font-extrabold ${additional >= 0 ? "text-positive" : "text-danger"}`}>{money(additional)}</p>
@@ -80,4 +94,12 @@ function operationLabel(kind: string) {
     unallocated: "Нераспределённое движение"
   };
   return labels[kind] ?? "Операция";
+}
+
+function dayWord(count: number) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return "день";
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дня";
+  return "дней";
 }

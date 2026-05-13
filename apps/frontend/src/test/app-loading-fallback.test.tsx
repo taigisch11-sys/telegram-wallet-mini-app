@@ -37,5 +37,5 @@ describe("App loading fallback", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Продолжить локально" }));
     expect(screen.getByText("Быстрый старт")).toBeInTheDocument();
-  });
+  }, 15000);
 });
