@@ -197,6 +197,7 @@ function findAdminOrDefault(state: AppState, adminId?: string): Admin {
 function findAuthorizedAdmin(state: AppState, telegramUserId: string, env: WorkerEnv): Admin {
   const admin = state.admins.find((item) => item.telegramUserId === telegramUserId);
   if (admin?.status === "active") return admin;
+  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL) return state.admins[0];
   if (env.APP_ENV !== "production" || env.ALLOW_WEB_PREVIEW === "true") return state.admins[0];
   throw new Error("Ваш Telegram не найден в листе «Администраторы» или профиль не активен");
 }
