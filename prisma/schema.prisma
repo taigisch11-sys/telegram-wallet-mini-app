@@ -265,3 +265,150 @@ model TelegramUpdate {
   updateId    BigInt   @unique
   processedAt DateTime @default(now())
 }
+
+model TrainingUser {
+  id                  String                       @id @default(cuid())
+  telegramId          String                       @unique
+  username            String?
+  firstName           String?
+  role                String                       @default("student")
+  createdAt           DateTime                     @default(now())
+  coachLinks          TrainingCoachStudent[]       @relation("TrainingCoach")
+  studentLinks        TrainingCoachStudent[]       @relation("TrainingStudent")
+  coachPlans          TrainingPlan[]               @relation("TrainingPlanCoach")
+  studentPlans        TrainingPlan[]               @relation("TrainingPlanStudent")
+  coachSessions       TrainingSession[]            @relation("TrainingSessionCoach")
+  studentSessions     TrainingSession[]            @relation("TrainingSessionStudent")
+  sentMessages        TrainingChatMessage[]        @relation("TrainingMessageSender")
+  coachMessages       TrainingChatMessage[]        @relation("TrainingMessageCoach")
+  studentMessages     TrainingChatMessage[]        @relation("TrainingMessageStudent")
+  balanceTransactions TrainingBalanceTransaction[]
+
+  @@index([role])
+}
+
+model TrainingCoachStudent {
+  id         String       @id @default(cuid())
+  coachId    String
+  studentId  String
+  status     String       @default("active")
+  goal       String       @default("Персональное ведение")
+  risk       String       @default("green")
+  compliance Int          @default(100)
+  joinedAt   DateTime     @default(now())
+  coach      TrainingUser @relation("TrainingCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  student    TrainingUser @relation("TrainingStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, studentId])
+  @@index([studentId])
+}
+
+model TrainingPlan {
+  id        String            @id @default(cuid())
+  coachId   String
+  studentId String?
+  title     String
+  goal      String
+  startDate DateTime
+  weeks     Int               @default(4)
+  status    String            @default("active")
+  createdAt DateTime          @default(now())
+  coach     TrainingUser      @relation("TrainingPlanCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  student   TrainingUser?     @relation("TrainingPlanStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  sessions  TrainingSession[]
+
+  @@index([coachId, createdAt])
+  @@index([studentId, startDate])
+}
+
+model TrainingSession {
+  id            String             @id @default(cuid())
+  planId        String?
+  coachId       String
+  studentId     String?
+  title         String
+  scheduledDate DateTime
+  status        String             @default("planned")
+  focus         String             @default("Сила")
+  durationMin   Int                @default(45)
+  intensity     Int                @default(6)
+  createdAt     DateTime           @default(now())
+  plan          TrainingPlan?      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  coach         TrainingUser       @relation("TrainingSessionCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  student       TrainingUser?      @relation("TrainingSessionStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  exercises     TrainingExercise[]
+  logs          TrainingWorkoutLog[]
+
+  @@index([coachId, scheduledDate])
+  @@index([studentId, scheduledDate])
+}
+
+model TrainingExercise {
+  id         String               @id @default(cuid())
+  sessionId  String
+  name       String
+  sets       Int
+  reps       String
+  weight     String
+  restSec    Int                  @default(90)
+  notes      String               @default("")
+  sortOrder  Int                  @default(0)
+  actualSets Int                  @default(0)
+  createdAt  DateTime             @default(now())
+  session    TrainingSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  logs       TrainingWorkoutLog[]
+
+  @@index([sessionId, sortOrder])
+}
+
+model TrainingWorkoutLog {
+  id         String            @id @default(cuid())
+  sessionId  String
+  studentId  String
+  exerciseId String?
+  status     String            @default("done")
+  actualSets Int               @default(0)
+  feedback   String?
+  createdAt  DateTime          @default(now())
+  session    TrainingSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exercise   TrainingExercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId, createdAt])
+  @@index([studentId, createdAt])
+}
+
+model TrainingChatMessage {
+  id        String       @id @default(cuid())
+  coachId   String
+  studentId String
+  senderId  String
+  body      String
+  context   String?
+  createdAt DateTime     @default(now())
+  readAt    DateTime?
+  coach     TrainingUser @relation("TrainingMessageCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  student   TrainingUser @relation("TrainingMessageStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  sender    TrainingUser @relation("TrainingMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, createdAt])
+  @@index([studentId, createdAt])
+}
+
+model TrainingBalanceTransaction {
+  id        String       @id @default(cuid())
+  userId    String
+  kind      String
+  amount    Decimal      @db.Decimal(14, 2)
+  status    String       @default("success")
+  note      String
+  createdAt DateTime     @default(now())
+  user      TrainingUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model TrainingTelegramUpdate {
+  id          String   @id @default(cuid())
+  updateId    BigInt   @unique
+  processedAt DateTime @default(now())
+}

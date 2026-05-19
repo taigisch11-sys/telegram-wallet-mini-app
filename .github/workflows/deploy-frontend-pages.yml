@@ -37,6 +37,18 @@ jobs:
       - name: Build frontend
         run: npm run build --workspace @wallet/frontend
 
+      - name: Build training frontend
+        env:
+          VITE_BASE_PATH: /telegram-wallet-mini-app/training/
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+        run: npm run build --workspace @training/frontend
+
+      - name: Add training app to Pages artifact
+        run: |
+          mkdir -p apps/frontend/dist/training
+          cp -r apps/training/dist/* apps/frontend/dist/training/
+          cp apps/training/dist/index.html apps/frontend/dist/training/404.html
+
       - name: Add SPA fallback
         run: cp apps/frontend/dist/index.html apps/frontend/dist/404.html
 

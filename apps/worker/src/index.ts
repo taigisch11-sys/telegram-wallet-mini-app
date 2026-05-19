@@ -31,6 +31,7 @@ import {
   updatePayment
 } from "./state";
 import { verifyTelegramInitData } from "./telegram";
+import { registerTrainingRoutes } from "./training";
 
 type AppEnv = {
   Bindings: WorkerEnv;
@@ -62,6 +63,8 @@ app.onError((error, c) => {
 });
 
 app.get("/health", (c) => c.json({ ok: true }));
+
+registerTrainingRoutes(app);
 
 app.post("/api/auth/telegram", async (c) => {
   const body = await c.req.json<{ initData?: string }>();
