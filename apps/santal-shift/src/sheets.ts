@@ -110,18 +110,16 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
     headers: ["request_id", "request_type", "admin_id", "telegram_user_id", "branch_id", "shift_id", "message", "status", "created_at", "updated_at"],
     rows: demoState.assignments.map((assignment) => {
       const admin = demoState.admins.find((item) => item.id === assignment.adminId);
+      const shift = demoState.shifts.find((item) => item.id === assignment.shiftId);
       return [
-        assignment.id,
-        assignment.shiftId,
+        `request_${assignment.id}`,
+        "take_shift",
         assignment.adminId,
         admin?.telegramUserId ?? "",
-        admin?.fullName ?? "",
-        assignment.status,
-        assignment.source,
-        assignment.status === "confirmed" ? assignment.updatedAt : "",
-        "",
-        assignment.status === "completed" ? assignment.updatedAt : "",
-        "",
+        shift?.branchId ?? "",
+        assignment.shiftId,
+        `Заявка на смену ${shift?.date ?? ""} ${shift?.startTime ?? ""}-${shift?.endTime ?? ""}`.trim(),
+        assignment.status === "cancelled" ? "cancelled" : "approved",
         assignment.createdAt,
         assignment.updatedAt
       ];
@@ -144,19 +142,10 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
       "created_at",
       "updated_at"
     ],
-    rows: demoState.payouts.map((payout) => [
-      payout.id,
-      payout.adminId,
-      payout.periodStart,
-      payout.periodEnd,
-      String(payout.grossAmount),
-      String(payout.bonusAmount),
-      String(payout.penaltyAmount),
-      String(payout.netAmount),
-      "sbp",
-      payout.status,
-      ""
-    ])
+    rows: demoState.assignments.map((assignment) => {
+      const admin = demoState.admins.find((item) => item.id === assignment.adminId);
+      return assignmentSheetRow({ assignment, admin, cancelReason: "" });
+    })
   },
   {
     name: "Ставки",
@@ -179,7 +168,19 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
   {
     name: "Выплаты",
     headers: ["payout_id", "admin_id", "period_start", "period_end", "gross_amount", "bonus_amount", "penalty_amount", "net_amount", "payment_method", "status", "paid_at"],
-    rows: []
+    rows: demoState.payouts.map((payout) => [
+      payout.id,
+      payout.adminId,
+      payout.periodStart,
+      payout.periodEnd,
+      String(payout.grossAmount),
+      String(payout.bonusAmount),
+      String(payout.penaltyAmount),
+      String(payout.netAmount),
+      "sbp",
+      payout.status,
+      ""
+    ])
   },
   {
     name: "Начисления",
@@ -362,25 +363,28 @@ export async function appendAudit(env: WorkerEnv, row: string[]): Promise<void> 
   await appendValues(env, "Аудит_лог!A:K", [row]);
 }
 
-export async function appendAssignment(env: WorkerEnv, input: { assignment: Assignment; admin: Admin; shift: Shift }): Promise<void> {
+export async function appendAssignment(env: WorkerEnv, input: { assignment: Assignment; admin: Admin; shift: Shift; cancelReason?: string }): Promise<void> {
   if (!hasGoogleCredentials(env)) return;
-  await appendValues(env, "Назначения!A:M", [
-    [
-      input.assignment.id,
-      input.assignment.shiftId,
-      input.assignment.adminId,
-      input.admin.telegramUserId,
-      input.admin.fullName,
-      input.assignment.status,
-      input.assignment.source,
-      input.assignment.status === "confirmed" ? input.assignment.updatedAt : "",
-      "",
-      input.assignment.status === "completed" ? input.assignment.updatedAt : "",
-      "",
-      input.assignment.createdAt,
-      input.assignment.updatedAt
-    ]
-  ]);
+  await appendValues(env, "Назначения!A:M", [assignmentSheetRow(input)]);
+}
+
+function assignmentSheetRow(input: { assignment: Assignment; admin?: Admin; cancelReason?: string }): string[] {
+  const status = input.assignment.status;
+  return [
+    input.assignment.id,
+    input.assignment.shiftId,
+    input.assignment.adminId,
+    input.admin?.telegramUserId ?? "",
+    input.admin?.fullName ?? "",
+    status,
+    input.assignment.source,
+    ["confirmed", "checked_in", "completed"].includes(status) ? input.assignment.updatedAt : "",
+    ["checked_in", "completed"].includes(status) ? input.assignment.updatedAt : "",
+    status === "completed" ? input.assignment.updatedAt : "",
+    status === "cancelled" ? input.cancelReason ?? "Отмена через Mini App" : "",
+    input.assignment.createdAt,
+    input.assignment.updatedAt
+  ];
 }
 
 export async function appendAccrual(env: WorkerEnv, input: { assignment: Assignment; shift: Shift; status: string; comment?: string }): Promise<void> {
@@ -444,7 +448,7 @@ async function readStateFromSheets(env: WorkerEnv): Promise<AppState> {
     status: normalizeAdminStatus(cell(row, 9)),
     reliabilityScore: numberCell(row, 10, 100)
   }));
-  const assignments: Assignment[] = assignmentRows.filter((row) => row[0]).map((row) => ({
+  const parsedAssignments: Assignment[] = assignmentRows.filter((row) => row[0]).map((row) => ({
     id: cell(row, 0),
     shiftId: cell(row, 1),
     adminId: cell(row, 2),
@@ -453,6 +457,7 @@ async function readStateFromSheets(env: WorkerEnv): Promise<AppState> {
     createdAt: cell(row, 11, new Date().toISOString()),
     updatedAt: cell(row, 12, new Date().toISOString())
   }));
+  const assignments = dedupeLatestAssignments(parsedAssignments);
   const shifts: Shift[] = shiftRows.filter((row) => row[0]).map((row) => {
     const shiftId = cell(row, 0);
     const activeAssignments = assignments.filter((assignment) => assignment.shiftId === shiftId && assignment.status !== "cancelled");
@@ -564,6 +569,22 @@ function normalizeStoryStatus(value: string): Story["status"] {
 
 function normalizePayoutStatus(value: string): Payout["status"] {
   return ["draft", "approved", "paid", "cancelled"].includes(value) ? (value as Payout["status"]) : "draft";
+}
+
+export function dedupeLatestAssignments(assignments: Assignment[]): Assignment[] {
+  const latestById = new Map<string, Assignment>();
+  for (const assignment of assignments) {
+    const existing = latestById.get(assignment.id);
+    if (!existing || toTimestamp(assignment.updatedAt) >= toTimestamp(existing.updatedAt)) {
+      latestById.set(assignment.id, assignment);
+    }
+  }
+  return [...latestById.values()];
+}
+
+function toTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function hasGoogleCredentials(env: WorkerEnv): boolean {

@@ -45,4 +45,65 @@ describe("Santal Shift worker API", () => {
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toMatchObject({ ok: false, reason: "duplicate" });
   });
+
+  it("rejects production bootstrap without Telegram initData", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "/api/bootstrap",
+      {},
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false"
+      }
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      message: "Откройте приложение из Telegram"
+    });
+  });
+
+  it("returns unauthorized for Telegram initData with a bad signature", async () => {
+    const app = createApp();
+    const initData = new URLSearchParams({
+      user: JSON.stringify({ id: 42, first_name: "Test" }),
+      auth_date: String(Math.floor(Date.now() / 1000)),
+      hash: "bad_signature"
+    }).toString();
+    const response = await app.request(
+      "/api/bootstrap",
+      { headers: { "X-Telegram-Init-Data": initData } },
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false"
+      }
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("reports release readiness without leaking secret values", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "/api/release/readiness",
+      {},
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false",
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "",
+        GOOGLE_PRIVATE_KEY: ""
+      }
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.ready).toBe(false);
+    expect(payload.checks.googleServiceAccountEmail.ok).toBe(false);
+    expect(payload.checks.googlePrivateKey.ok).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain("test-secret");
+  });
 });

@@ -29,6 +29,16 @@ curl -X POST -H "Authorization: Bearer <ADMIN_SETUP_TOKEN>" https://santal-shift
 
 `Назначения` хранит связь сотрудника и смены с фактами подтверждения, отметки выхода, завершения и отмены. `Начисления` хранит проверяемые строки выплат по каждой смене, чтобы будущие изменения ставок не ломали историю. `Шахматка` содержит не только агрегат филиала за день, но и строки конкретных смен со слотами времени и назначенными администраторами.
 
+## Проверка релиза
+
+Production-готовность проверяется endpoint:
+
+```bash
+curl https://santal-shift-app.taigisch11.workers.dev/api/release/readiness
+```
+
+Он возвращает только булевые проверки без значений секретов. Для настоящего релиза должны быть включены Telegram webhook secret, admin setup token, Google Sheet ID, service account email/private key, `APP_ENV=production` и выключенный `ALLOW_WEB_PREVIEW`.
+
 ## Telegram
 
 Секреты Worker:

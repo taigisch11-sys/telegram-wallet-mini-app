@@ -127,3 +127,7 @@ jobs:
             drop_pending_updates: true
           });
           NODE
+
+      - name: Check release readiness
+        run: |
+          curl --fail --silent --show-error "${WORKER_URL}api/release/readiness"

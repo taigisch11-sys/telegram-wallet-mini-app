@@ -27,11 +27,12 @@ export function createApp() {
   const app = new Hono<AppBindings>();
 
   app.onError((error, c) => {
-    return c.json({ ok: false, message: error instanceof Error ? error.message : "Внутренняя ошибка" }, 500);
+    return c.json({ ok: false, message: error instanceof Error ? error.message : "Внутренняя ошибка" }, errorStatus(error));
   });
 
   app.get("/", (c) => c.html(renderAppHtml()));
   app.get("/health", (c) => c.json({ ok: true, app: "santal-shift", time: new Date().toISOString() }));
+  app.get("/api/release/readiness", (c) => c.json(buildReleaseReadiness(c.env)));
 
   app.get("/api/bootstrap", async (c) => {
     const { state, sync } = await currentState(c.env);
@@ -95,6 +96,8 @@ export function createApp() {
     const id = c.req.param("id");
     const action = c.req.param("action");
     const nowIso = new Date().toISOString();
+    const beforeAssignment = memoryState.assignments.find((item) => item.id === id && item.adminId === admin.id);
+    if (!beforeAssignment) return c.json({ ok: false, message: "Назначение не найдено" }, 404);
 
     if (action === "confirm") memoryState = confirmAssignment(memoryState, { assignmentId: id, adminId: admin.id, nowIso });
     else if (action === "check-in") memoryState = checkInAssignment(memoryState, { assignmentId: id, adminId: admin.id, nowIso });
@@ -106,6 +109,25 @@ export function createApp() {
     }
     else if (action === "cancel") memoryState = cancelAssignment(memoryState, { assignmentId: id, adminId: admin.id, nowIso, reason: body.reason });
     else return c.json({ ok: false, message: "Неизвестное действие" }, 400);
+
+    const assignment = memoryState.assignments.find((item) => item.id === id);
+    const shift = assignment ? memoryState.shifts.find((item) => item.id === assignment.shiftId) : undefined;
+    if (assignment && shift && assignment.updatedAt !== beforeAssignment.updatedAt) {
+      await appendAssignment(c.env, { assignment, admin, shift, cancelReason: body.reason });
+      await appendAudit(c.env, [
+        `audit_${Date.now()}_${assignment.id}_${action}`,
+        new Date().toISOString(),
+        "telegram_user",
+        admin.id,
+        `assignment.${action}`,
+        "assignment",
+        assignment.id,
+        JSON.stringify({ status: assignment.status, shiftId: assignment.shiftId }),
+        "mini_app",
+        "success",
+        ""
+      ]);
+    }
 
     return c.json({ ok: true, state: serializeState(memoryState, admin, loaded.sync) });
   });
@@ -197,9 +219,52 @@ function findAdminOrDefault(state: AppState, adminId?: string): Admin {
 function findAuthorizedAdmin(state: AppState, telegramUserId: string, env: WorkerEnv): Admin {
   const admin = state.admins.find((item) => item.telegramUserId === telegramUserId);
   if (admin?.status === "active") return admin;
-  if (!env.GOOGLE_SERVICE_ACCOUNT_EMAIL) return state.admins[0];
   if (env.APP_ENV !== "production" || env.ALLOW_WEB_PREVIEW === "true") return state.admins[0];
   throw new Error("Ваш Telegram не найден в листе «Администраторы» или профиль не активен");
+}
+
+function errorStatus(error: unknown): 401 | 403 | 500 {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("Откройте приложение") || message.includes("Telegram init data") || message.includes("Telegram initData") || message.includes("Invalid Telegram")) return 401;
+  if (message.includes("Telegram не найден") || message.includes("профиль не активен")) return 403;
+  return 500;
+}
+
+function buildReleaseReadiness(env: WorkerEnv) {
+  const checks = {
+    appEnvProduction: releaseCheck(env.APP_ENV === "production", "APP_ENV должен быть production"),
+    webPreviewDisabled: releaseCheck(env.ALLOW_WEB_PREVIEW !== "true", "ALLOW_WEB_PREVIEW должен быть выключен"),
+    webAppUrl: releaseCheck(isHttpsUrl(env.SANTAL_WEBAPP_URL), "SANTAL_WEBAPP_URL должен быть HTTPS URL"),
+    telegramBotToken: releaseCheck(hasValue(env.TELEGRAM_BOT_TOKEN), "TELEGRAM_BOT_TOKEN задан"),
+    telegramWebhookSecret: releaseCheck(hasValue(env.TELEGRAM_WEBHOOK_SECRET), "TELEGRAM_WEBHOOK_SECRET задан"),
+    adminSetupToken: releaseCheck(hasValue(env.ADMIN_SETUP_TOKEN), "ADMIN_SETUP_TOKEN задан"),
+    googleSheetId: releaseCheck(hasValue(env.GOOGLE_SHEET_ID), "GOOGLE_SHEET_ID задан"),
+    googleServiceAccountEmail: releaseCheck(hasValue(env.GOOGLE_SERVICE_ACCOUNT_EMAIL), "GOOGLE_SERVICE_ACCOUNT_EMAIL задан"),
+    googlePrivateKey: releaseCheck(hasValue(env.GOOGLE_PRIVATE_KEY), "GOOGLE_PRIVATE_KEY задан")
+  };
+  return {
+    ok: true,
+    ready: Object.values(checks).every((check) => check.ok),
+    generatedAt: new Date().toISOString(),
+    checks
+  };
+}
+
+function releaseCheck(ok: boolean, message: string) {
+  return { ok, message };
+}
+
+function hasValue(value?: string): boolean {
+  return Boolean(value?.trim());
+}
+
+function isHttpsUrl(value?: string): boolean {
+  if (!value) return false;
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function serializeState(state: AppState, admin: Admin, sync: Awaited<ReturnType<typeof loadState>>["sync"]) {
