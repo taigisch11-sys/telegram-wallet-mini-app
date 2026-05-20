@@ -85,6 +85,27 @@ describe("Santal Shift worker API", () => {
     expect(response.status).toBe(401);
   });
 
+  it("opens a Telegram demo session while Google Sheets credentials are missing", async () => {
+    const app = createApp();
+    const initData = await signedTelegramInitData({ id: 42, first_name: "Анна" }, env.TELEGRAM_BOT_TOKEN);
+    const response = await app.request(
+      "/api/bootstrap",
+      { headers: { "X-Telegram-Init-Data": initData } },
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false",
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "",
+        GOOGLE_PRIVATE_KEY: ""
+      }
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.state.sync.connected).toBe(false);
+    expect(payload.state.admin.status).toBe("active");
+  });
+
   it("reports release readiness without leaking secret values", async () => {
     const app = createApp();
     const response = await app.request(
@@ -107,3 +128,27 @@ describe("Santal Shift worker API", () => {
     expect(JSON.stringify(payload)).not.toContain("test-secret");
   });
 });
+
+async function signedTelegramInitData(user: Record<string, unknown>, botToken: string): Promise<string> {
+  const params = new URLSearchParams({
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    user: JSON.stringify(user)
+  });
+  const dataCheckString = [...params.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}=${value}`)
+    .join("\n");
+  const secretKey = await hmacSha256(new TextEncoder().encode("WebAppData"), new TextEncoder().encode(botToken));
+  const hash = toHex(await hmacSha256(secretKey, new TextEncoder().encode(dataCheckString)));
+  params.set("hash", hash);
+  return params.toString();
+}
+
+async function hmacSha256(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  const cryptoKey = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", cryptoKey, data));
+}
+
+function toHex(bytes: Uint8Array): string {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}

@@ -38,7 +38,7 @@ export function createApp() {
     const { state, sync } = await currentState(c.env);
     const identity = await resolveIdentity(c.env, c.req.header("X-Telegram-Init-Data"), c.req.header("X-Demo-Admin-Id"));
     const admin = identity.telegramUser
-      ? findAuthorizedAdmin(state, identity.telegramUser.id, c.env)
+      ? findAuthorizedAdmin(state, identity.telegramUser.id, c.env, sync)
       : findAdminOrDefault(state, identity.demoAdminId);
     memoryState = state;
 
@@ -55,7 +55,7 @@ export function createApp() {
     const loaded = await currentState(c.env);
     memoryState = loaded.state;
     const identity = await resolveIdentity(c.env, body.initData || c.req.header("X-Telegram-Init-Data"), c.req.header("X-Demo-Admin-Id"));
-    const admin = identity.telegramUser ? findAuthorizedAdmin(memoryState, identity.telegramUser.id, c.env) : findAdminOrDefault(memoryState, identity.demoAdminId);
+    const admin = identity.telegramUser ? findAuthorizedAdmin(memoryState, identity.telegramUser.id, c.env, loaded.sync) : findAdminOrDefault(memoryState, identity.demoAdminId);
 
     const result = takeShift(memoryState, {
       shiftId: body.shiftId,
@@ -92,7 +92,7 @@ export function createApp() {
     const loaded = await currentState(c.env);
     memoryState = loaded.state;
     const identity = await resolveIdentity(c.env, body.initData || c.req.header("X-Telegram-Init-Data"), c.req.header("X-Demo-Admin-Id"));
-    const admin = identity.telegramUser ? findAuthorizedAdmin(memoryState, identity.telegramUser.id, c.env) : findAdminOrDefault(memoryState, identity.demoAdminId);
+    const admin = identity.telegramUser ? findAuthorizedAdmin(memoryState, identity.telegramUser.id, c.env, loaded.sync) : findAdminOrDefault(memoryState, identity.demoAdminId);
     const id = c.req.param("id");
     const action = c.req.param("action");
     const nowIso = new Date().toISOString();
@@ -216,9 +216,15 @@ function findAdminOrDefault(state: AppState, adminId?: string): Admin {
   return state.admins.find((admin) => admin.id === adminId) ?? state.admins[0];
 }
 
-function findAuthorizedAdmin(state: AppState, telegramUserId: string, env: WorkerEnv): Admin {
+function findAuthorizedAdmin(
+  state: AppState,
+  telegramUserId: string,
+  env: WorkerEnv,
+  sync: Awaited<ReturnType<typeof loadState>>["sync"]
+): Admin {
   const admin = state.admins.find((item) => item.telegramUserId === telegramUserId);
   if (admin?.status === "active") return admin;
+  if (!sync.connected && !hasGoogleCredentials(env)) return findAdminOrDefault(state);
   if (env.APP_ENV !== "production" || env.ALLOW_WEB_PREVIEW === "true") return state.admins[0];
   throw new Error("Ваш Telegram не найден в листе «Администраторы» или профиль не активен");
 }
@@ -265,6 +271,10 @@ function isHttpsUrl(value?: string): boolean {
   } catch {
     return false;
   }
+}
+
+function hasGoogleCredentials(env: WorkerEnv): boolean {
+  return Boolean(env.GOOGLE_SHEET_ID && env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_PRIVATE_KEY);
 }
 
 function serializeState(state: AppState, admin: Admin, sync: Awaited<ReturnType<typeof loadState>>["sync"]) {
