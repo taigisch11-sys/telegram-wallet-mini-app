@@ -505,7 +505,7 @@ export function renderAppHtml(): string {
     function profileView() {
       const admin = app.data.state.admin;
       return '<div class="section-title"><h2>' + esc(admin.fullName.split(" ")[0]) + '</h2><span>профиль</span></div>' +
-        '<div class="profile-card"><div class="shift-title">Администратор</div><div class="shift-sub">Допущен к ' + admin.branchIds.length + ' филиалам</div><div class="hero-row"><div class="metric"><span>Надежность</span><strong>' + admin.reliabilityScore + '</strong></div><div class="metric"><span>Статус</span><strong>' + statusLabel(admin.status) + '</strong></div></div></div>' +
+        '<div class="profile-card"><div class="shift-title">' + roleLabel(admin.role) + '</div><div class="shift-sub">Допущен к ' + admin.branchIds.length + ' филиалам</div><div class="hero-row"><div class="metric"><span>Надежность</span><strong>' + admin.reliabilityScore + '</strong></div><div class="metric"><span>Статус</span><strong>' + statusLabel(admin.status) + '</strong></div></div></div>' +
         '<button class="list-card"><div class="shift-title">Мои документы</div><div class="shift-sub">Паспорт, самозанятость, реквизиты</div></button>' +
         '<button class="list-card"><div class="shift-title">Избранные филиалы</div><div class="shift-sub">Влияет на подбор смен и уведомления</div></button>' +
         '<button class="list-card"><div class="shift-title">О приложении</div><div class="shift-sub">Версия 1.0 · Санталь Смена</div></button>';
@@ -584,6 +584,12 @@ export function renderAppHtml(): string {
         completed: "Завершена",
         cancelled: "Отменена"
       })[status] || status;
+    }
+    function roleLabel(role) {
+      return ({
+        admin: "Администратор",
+        doctor_assistant: "Помощник врача"
+      })[role] || role;
     }
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);

@@ -34,7 +34,7 @@ describe("Santal Shift worker API", () => {
 
   it("takes a shift through API and rejects a repeated request", async () => {
     const app = createApp();
-    const body = JSON.stringify({ shiftId: "shift_20260520_central_morning" });
+    const body = JSON.stringify({ shiftId: "shift_20260520_csm2_admin_morning" });
     const headers = { "Content-Type": "application/json", "X-Demo-Admin-Id": "admin_nikita" };
 
     const first = await app.request("/api/shifts/take", { method: "POST", headers, body }, env);

@@ -38,11 +38,19 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
       "manager_contact",
       "is_active"
     ],
-    rows: [
-      ["branch_central", "clinic_santal", "Центральная клиника", "ул. Ленина, 42", "Новосибирск", "08:00", "21:00", "3", "Марина Куратор", "+7 913 000-11-22", "TRUE"],
-      ["branch_children", "clinic_santal", "Детское отделение", "ул. Фрунзе, 9", "Новосибирск", "09:00", "20:00", "1", "Ольга Старшая", "+7 913 000-22-33", "TRUE"],
-      ["branch_diagnostics", "clinic_santal", "Диагностика", "Красный проспект, 18", "Новосибирск", "07:30", "18:30", "2", "Антон Координатор", "+7 913 000-33-44", "TRUE"]
-    ]
+    rows: demoState.branches.map((branch) => [
+      branch.id,
+      demoState.settings.clinicId,
+      branch.name,
+      branch.address,
+      branch.city,
+      branch.workStartTime,
+      branch.workEndTime,
+      String(branch.defaultAdminQuota),
+      branch.managerName,
+      branch.managerContact,
+      branch.isActive ? "TRUE" : "FALSE"
+    ])
   },
   {
     name: "Администраторы",
@@ -59,10 +67,19 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
       "status",
       "reliability_score"
     ],
-    rows: [
-      ["admin_olga", "demo_olga", "olga_demo", "Ольга Иванова", "+7 913 111-22-33", "admin", "branch_central,branch_children,branch_diagnostics", "TRUE", "TRUE", "active", "98"],
-      ["admin_nikita", "demo_nikita", "nikita_demo", "Никита Соколов", "+7 913 222-33-44", "admin", "branch_central,branch_diagnostics", "TRUE", "TRUE", "active", "100"]
-    ]
+    rows: demoState.admins.map((admin) => [
+      admin.id,
+      admin.telegramUserId,
+      admin.telegramUsername ?? "",
+      admin.fullName,
+      "",
+      admin.role,
+      admin.branchIds.join(","),
+      admin.canTakeShifts ? "TRUE" : "FALSE",
+      admin.canViewPayouts ? "TRUE" : "FALSE",
+      admin.status,
+      String(admin.reliabilityScore)
+    ])
   },
   {
     name: "Смены",
@@ -150,7 +167,10 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
   {
     name: "Ставки",
     headers: ["rate_id", "rate_name", "branch_id", "role", "rate_type", "base_amount", "holiday_multiplier", "night_multiplier", "valid_from", "valid_to", "is_active"],
-    rows: [["rate_admin_base", "Администратор базовая", "", "admin", "hourly", "420", "1.5", "1.2", "2026-01-01", "", "TRUE"]]
+    rows: [
+      ["rate_admin_base", "Администратор", "", "admin", "hourly", "420", "1.5", "1.2", "2026-01-01", "", "TRUE"],
+      ["rate_doctor_assistant_base", "Помощник врача", "", "doctor_assistant", "hourly", "450", "1.5", "1.2", "2026-01-01", "", "TRUE"]
+    ]
   },
   {
     name: "Праздники",
@@ -272,8 +292,8 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
     headers: ["roles", "admin_statuses", "shift_statuses", "request_types", "request_statuses", "payout_statuses", "rate_types", "content_statuses"],
     rows: [
       ["admin", "active", "open", "take_shift", "new", "draft", "hourly", "draft"],
-      ["senior_admin", "paused", "assigned", "cancel_shift", "approved", "approved", "shift_fixed", "published"],
-      ["manager", "blocked", "completed", "payout_question", "rejected", "paid", "daily", "archived"]
+      ["doctor_assistant", "paused", "assigned", "cancel_shift", "approved", "approved", "shift_fixed", "published"],
+      ["", "blocked", "completed", "payout_question", "rejected", "paid", "daily", "archived"]
     ]
   },
   {
@@ -540,7 +560,7 @@ function boolCell(row: string[], index: number, fallback: boolean): boolean {
 }
 
 function normalizeRole(value: string): Admin["role"] {
-  return ["admin", "senior_admin", "manager", "owner"].includes(value) ? (value as Admin["role"]) : "admin";
+  return ["admin", "doctor_assistant"].includes(value) ? (value as Admin["role"]) : "admin";
 }
 
 function normalizeAdminStatus(value: string): Admin["status"] {
