@@ -104,11 +104,6 @@ jobs:
             }
           }
 
-          await call("setMyName", { name: "Санталь Смена" });
-          await call("setMyShortDescription", { short_description: "Подбор смен администраторов клиники" });
-          await call("setMyDescription", {
-            description: "Откройте Mini App, выберите филиал и дату, возьмите смену, подтвердите выход и отслеживайте начисления."
-          });
           await call("setMyCommands", {
             commands: [
               { command: "start", description: "Открыть приложение" }
