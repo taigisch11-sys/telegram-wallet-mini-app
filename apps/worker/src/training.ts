@@ -33,6 +33,18 @@ const topUpSchema = z.object({
   note: z.string().trim().min(1).max(120),
   studentId: z.string().nullable().optional()
 });
+const exerciseProgressSchema = z.object({
+  actualSets: z.number().int().min(0).max(100).optional(),
+  weight: z.string().trim().min(1).max(40).optional()
+});
+const checkInSchema = z.object({
+  sessionId: z.string().min(1),
+  studentId: z.string().nullable().optional(),
+  bodyWeightKg: z.number().positive().max(400).nullable().optional(),
+  energy: z.number().int().min(1).max(5),
+  soreness: z.number().int().min(0).max(10),
+  note: z.string().trim().max(500).optional().default("")
+});
 const templatePlanSchema = z.object({
   studentId: z.string().nullable().optional()
 });
@@ -221,6 +233,24 @@ async function trainingState(env: WorkerEnv, user: TrainingUser) {
           LIMIT 100
         `;
 
+  const checkins =
+    user.role === "coach"
+      ? await db`
+          SELECT l.id, l."sessionId", l."studentId", l.feedback, l."createdAt"
+          FROM "TrainingWorkoutLog" l
+          JOIN "TrainingSession" s ON s.id = l."sessionId"
+          WHERE s."coachId" = ${user.id} AND l.status = 'checkin'
+          ORDER BY l."createdAt" DESC
+          LIMIT 100
+        `
+      : await db`
+          SELECT id, "sessionId", "studentId", feedback, "createdAt"
+          FROM "TrainingWorkoutLog"
+          WHERE "studentId" = ${user.id} AND status = 'checkin'
+          ORDER BY "createdAt" DESC
+          LIMIT 100
+        `;
+
   return {
     user,
     coach: coachRows[0]
@@ -276,8 +306,27 @@ async function trainingState(env: WorkerEnv, user: TrainingUser) {
       status: row.status,
       note: row.note,
       createdAt: row.createdAt
-    }))
+    })),
+    checkins: checkins.map(parseCheckIn).filter(Boolean)
   };
+}
+
+function parseCheckIn(row: any) {
+  try {
+    const feedback = JSON.parse(row.feedback || "{}");
+    return {
+      id: row.id,
+      sessionId: row.sessionId,
+      studentId: row.studentId,
+      bodyWeightKg: feedback.bodyWeightKg ?? null,
+      energy: asNumber(feedback.energy || 3),
+      soreness: asNumber(feedback.soreness || 0),
+      note: String(feedback.note ?? ""),
+      createdAt: row.createdAt
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function ensureCoachStudent(env: WorkerEnv, coach: TrainingUser, preferredStudentId?: string | null) {
@@ -373,18 +422,22 @@ async function sendTrainingStartMessage(env: WorkerEnv, chatId: number | string)
     throw new Error("Training Telegram bot is not configured");
   }
 
-  await fetch(`https://api.telegram.org/bot${env.TRAINING_TELEGRAM_BOT_TOKEN}/setChatMenuButton`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      menu_button: {
-        type: "web_app",
-        text: "Тренировки",
-        web_app: { url: env.TRAINING_TELEGRAM_WEBAPP_URL }
-      }
-    })
-  });
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TRAINING_TELEGRAM_BOT_TOKEN}/setChatMenuButton`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        menu_button: {
+          type: "web_app",
+          text: "Тренировки",
+          web_app: { url: env.TRAINING_TELEGRAM_WEBAPP_URL }
+        }
+      })
+    });
+  } catch {
+    // Кнопка меню не должна блокировать /start: inline-кнопка ниже остается основным входом.
+  }
 
   const response = await fetch(`https://api.telegram.org/bot${env.TRAINING_TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
@@ -409,7 +462,16 @@ async function sendTrainingStartMessage(env: WorkerEnv, chatId: number | string)
 }
 
 export function registerTrainingRoutes(app: Hono<any>) {
-  app.get("/training/health", async (c) => c.json({ ok: true, app: "training" }));
+  app.get("/training/health", async (c) =>
+    c.json({
+      ok: true,
+      app: "training",
+      telegramBotConfigured: Boolean(c.env.TRAINING_TELEGRAM_BOT_TOKEN),
+      webhookSecretConfigured: Boolean(c.env.TRAINING_TELEGRAM_WEBHOOK_SECRET),
+      webappUrlConfigured: Boolean(c.env.TRAINING_TELEGRAM_WEBAPP_URL),
+      databaseConfigured: Boolean(c.env.DATABASE_URL)
+    })
+  );
 
   app.post("/training/api/auth/telegram", async (c) => {
     const body = await c.req.json<{ initData?: string }>();
@@ -525,13 +587,80 @@ export function registerTrainingRoutes(app: Hono<any>) {
     const session = sessionRows[0] as { id: string; studentId: string | null; status: SessionStatus } | undefined;
     if (!session) return c.json({ error: { message: "Тренировка не найдена" } }, 404);
 
-    await sql(c.env)`UPDATE "TrainingSession" SET status = ${body.status} WHERE id = ${session.id}`;
-    if (body.status === "done" && session.status !== "done" && session.studentId) {
+    const updated = await sql(c.env)`
+      UPDATE "TrainingSession"
+      SET status = ${body.status}
+      WHERE id = ${session.id} AND status <> ${body.status}
+      RETURNING id
+    `;
+    if (body.status === "done" && updated[0] && session.status !== "done" && session.studentId) {
       await sql(c.env)`
         INSERT INTO "TrainingBalanceTransaction" (id, "userId", kind, amount, status, note, "createdAt")
         VALUES (${id()}, ${session.studentId}, 'charge', -2000, 'success', 'Списание за выполненную тренировку', NOW())
       `;
     }
+    return c.json(await trainingState(c.env, user));
+  });
+
+  app.patch("/training/api/exercises/:id/progress", async (c) => {
+    const user = c.get("trainingUser") as TrainingUser;
+    const body = exerciseProgressSchema.parse(await c.req.json());
+    const exerciseRows = await sql(c.env)`
+      SELECT e.id, e.weight, COALESCE(e."actualSets", 0) AS "actualSets", e.sets, s.id AS "sessionId", s."studentId"
+      FROM "TrainingExercise" e
+      JOIN "TrainingSession" s ON s.id = e."sessionId"
+      WHERE e.id = ${c.req.param("id")} AND (s."coachId" = ${user.id} OR s."studentId" = ${user.id})
+      LIMIT 1
+    `;
+    const exercise = exerciseRows[0] as { id: string; weight: string; actualSets: number; sets: number; sessionId: string; studentId: string | null } | undefined;
+    if (!exercise) return c.json({ error: { message: "Упражнение не найдено" } }, 404);
+
+    const nextSets = Math.min(exercise.sets, body.actualSets ?? exercise.actualSets);
+    const nextWeight = body.weight ?? exercise.weight;
+    await sql(c.env)`
+      UPDATE "TrainingExercise"
+      SET "actualSets" = ${nextSets}, weight = ${nextWeight}
+      WHERE id = ${exercise.id}
+    `;
+
+    if (exercise.studentId) {
+      await sql(c.env)`
+        INSERT INTO "TrainingWorkoutLog" (id, "sessionId", "studentId", "exerciseId", status, "actualSets", feedback, "createdAt")
+        VALUES (${id()}, ${exercise.sessionId}, ${exercise.studentId}, ${exercise.id}, 'exercise', ${nextSets}, ${JSON.stringify({ v: 1, kind: "exercise", weight: nextWeight })}, NOW())
+      `;
+    }
+    return c.json(await trainingState(c.env, user));
+  });
+
+  app.post("/training/api/checkins", async (c) => {
+    const user = c.get("trainingUser") as TrainingUser;
+    const body = checkInSchema.parse(await c.req.json());
+    const sessionRows = await sql(c.env)`
+      SELECT id, "coachId", "studentId"
+      FROM "TrainingSession"
+      WHERE id = ${body.sessionId} AND ("coachId" = ${user.id} OR "studentId" = ${user.id})
+      LIMIT 1
+    `;
+    const session = sessionRows[0] as { id: string; coachId: string; studentId: string | null } | undefined;
+    if (!session) return c.json({ error: { message: "Тренировка не найдена" } }, 404);
+    const studentId = user.role === "coach" ? body.studentId ?? session.studentId : user.id;
+    if (!studentId || (session.studentId && studentId !== session.studentId)) {
+      return c.json({ error: { message: "Чек-ин можно сохранить только для ученика этой тренировки" } }, 403);
+    }
+    if (user.role === "coach") {
+      const allowed = await sql(c.env)`
+        SELECT id
+        FROM "TrainingCoachStudent"
+        WHERE "coachId" = ${user.id} AND "studentId" = ${studentId} AND status = 'active'
+        LIMIT 1
+      `;
+      if (!allowed[0]) return c.json({ error: { message: "Ученик не связан с тренером" } }, 403);
+    }
+
+    await sql(c.env)`
+      INSERT INTO "TrainingWorkoutLog" (id, "sessionId", "studentId", "exerciseId", status, "actualSets", feedback, "createdAt")
+      VALUES (${id()}, ${session.id}, ${studentId}, null, 'checkin', 0, ${JSON.stringify({ v: 1, kind: "checkin", bodyWeightKg: body.bodyWeightKg ?? null, energy: body.energy, soreness: body.soreness, note: body.note ?? "" })}, NOW())
+    `;
     return c.json(await trainingState(c.env, user));
   });
 

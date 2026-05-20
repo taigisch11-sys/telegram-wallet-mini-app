@@ -8,9 +8,11 @@ import {
   CircleDollarSign,
   Dumbbell,
   Flame,
+  HeartPulse,
   MessageCircle,
   Plus,
   Radio,
+  Scale,
   Send,
   ShieldCheck,
   Sparkles,
@@ -103,6 +105,17 @@ type BalanceTransaction = {
   createdAt: string;
 };
 
+type CheckIn = {
+  id: string;
+  sessionId: string | null;
+  studentId: string;
+  bodyWeightKg: number | null;
+  energy: number;
+  soreness: number;
+  note: string;
+  createdAt: string;
+};
+
 type TrainingState = {
   user: TrainingUser;
   coach: Student | null;
@@ -112,6 +125,7 @@ type TrainingState = {
   exercises: Exercise[];
   messages: ChatMessage[];
   transactions: BalanceTransaction[];
+  checkins: CheckIn[];
 };
 
 declare global {
@@ -119,6 +133,7 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData?: string;
+        version?: string;
         ready?: () => void;
         expand?: () => void;
         HapticFeedback?: {
@@ -294,6 +309,10 @@ function demoState(role: Role): TrainingState {
     transactions: [
       { id: "trx-1", userId: studentId, kind: "topup", amount: 15000, status: "success", note: "Пакет 8 тренировок", createdAt: todayIso(-8) },
       { id: "trx-2", userId: studentId, kind: "charge", amount: -2200, status: "success", note: "Списание за тренировку", createdAt: todayIso(-2) }
+    ],
+    checkins: [
+      { id: "checkin-1", sessionId: sessionA, studentId, bodyWeightKg: 82.4, energy: 4, soreness: 2, note: "Сон нормальный, колено не беспокоит.", createdAt: todayIso(-1) },
+      { id: "checkin-2", sessionId: sessionB, studentId, bodyWeightKg: 82.1, energy: 3, soreness: 4, note: "После тяги забились задние бедра.", createdAt: todayIso(-5) }
     ]
   };
 }
@@ -314,7 +333,8 @@ function emptyState(role: Role): TrainingState {
     sessions: [],
     exercises: [],
     messages: [],
-    transactions: []
+    transactions: [],
+    checkins: []
   };
 }
 
@@ -354,6 +374,10 @@ const api = {
   createTemplatePlan: (studentId?: string | null) => request<TrainingState>("/training/api/plans/template", { method: "POST", body: JSON.stringify({ studentId }) }),
   updateSessionStatus: (sessionId: string, status: SessionStatus) =>
     request<TrainingState>(`/training/api/sessions/${sessionId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  updateExerciseProgress: (exerciseId: string, body: { actualSets?: number; weight?: string }) =>
+    request<TrainingState>(`/training/api/exercises/${exerciseId}/progress`, { method: "PATCH", body: JSON.stringify(body) }),
+  addCheckIn: (body: { sessionId: string; studentId?: string | null; bodyWeightKg?: number | null; energy: number; soreness: number; note?: string }) =>
+    request<TrainingState>("/training/api/checkins", { method: "POST", body: JSON.stringify(body) }),
   addMessage: (body: { body: string; studentId?: string | null; context?: string | null }) =>
     request<TrainingState>("/training/api/messages", { method: "POST", body: JSON.stringify(body) }),
   topUp: (body: { amount: number; note: string; studentId?: string | null }) =>
@@ -361,6 +385,7 @@ const api = {
 };
 
 function haptic(type: "tap" | "success" | "warning" = "tap") {
+  if (!telegramVersionAtLeast("6.1")) return;
   if (type === "success") {
     window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("success");
     return;
@@ -372,6 +397,20 @@ function haptic(type: "tap" | "success" | "warning" = "tap") {
   window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.("light");
 }
 
+function telegramVersionAtLeast(minVersion: string) {
+  const version = window.Telegram?.WebApp?.version;
+  if (!version) return false;
+  const current = version.split(".").map((part) => Number(part));
+  const minimum = minVersion.split(".").map((part) => Number(part));
+  for (let index = 0; index < Math.max(current.length, minimum.length); index += 1) {
+    const left = current[index] ?? 0;
+    const right = minimum[index] ?? 0;
+    if (left > right) return true;
+    if (left < right) return false;
+  }
+  return true;
+}
+
 function saveLocalState(state: TrainingState) {
   localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(state));
 }
@@ -381,7 +420,7 @@ function loadLocalState(role: Role) {
   if (!raw) return emptyState(role);
   try {
     const state = JSON.parse(raw) as TrainingState;
-    return { ...state, user: { ...state.user, role } };
+    return { ...state, user: { ...state.user, role }, checkins: state.checkins ?? [] };
   } catch {
     return emptyState(role);
   }
@@ -472,7 +511,11 @@ function useTrainingApp() {
         setRemoteAvailable(hasSession);
         if (hasSession && !isDemo) {
           const remoteState = await api.state();
-          if (!cancelled) setState(remoteState);
+          if (!cancelled) {
+            setState(remoteState);
+            setRoleState(remoteState.user.role);
+            localStorage.setItem(LOCAL_ROLE_KEY, remoteState.user.role);
+          }
         } else if (!isDemo) {
           setState(loadLocalState(role));
         }
@@ -571,10 +614,17 @@ export function App() {
       })),
     [role]
   );
-  const hasLiveData = state.students.length > 0 || state.plans.length > 0 || state.sessions.length > 0 || state.messages.length > 0 || state.transactions.length > 0;
+  const hasLiveData = state.students.length > 0 || state.plans.length > 0 || state.sessions.length > 0 || state.messages.length > 0 || state.transactions.length > 0 || (state.checkins ?? []).length > 0;
   const roleLocked = !isDemo && remoteAvailable && hasLiveData;
   const selectedStudent = role === "coach" ? state.students.find((student) => student.id === selectedStudentId) ?? state.students[0] ?? null : null;
   const visibleBalance = role === "coach" && selectedStudent ? selectedStudent.balance : ownBalance;
+  const latestCheckIn = useMemo(() => {
+    const targetStudentId = role === "coach" ? selectedStudent?.id : state.user.id;
+    if (!targetStudentId) return null;
+    return [...(state.checkins ?? [])]
+      .filter((checkin) => checkin.studentId === targetStudentId)
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0] ?? null;
+  }, [role, selectedStudent?.id, state.checkins, state.user.id]);
 
   useEffect(() => {
     if (role !== "coach") return;
@@ -701,23 +751,76 @@ export function App() {
     }
   };
 
-  const markSet = (exerciseId: string) => {
+  const updateExerciseProgress = async (exerciseId: string, patch: { actualSets?: number; weight?: string }) => {
     const next = {
       ...state,
       exercises: state.exercises.map((exercise) =>
-        exercise.id === exerciseId ? { ...exercise, actualSets: Math.min(exercise.sets, exercise.actualSets + 1) } : exercise
+        exercise.id === exerciseId ? { ...exercise, ...patch } : exercise
       )
     };
-    commitState(next);
+    if (!remoteAvailable || isDemo) {
+      commitState(next);
+      return;
+    }
+    try {
+      commitState(await api.updateExerciseProgress(exerciseId, patch));
+    } catch (error) {
+      commitState(next);
+      setToast(error instanceof Error ? error.message : "Факт упражнения сохранен локально");
+    }
+  };
+
+  const markSet = (exerciseId: string) => {
+    const exercise = state.exercises.find((item) => item.id === exerciseId);
+    if (!exercise) return;
+    void updateExerciseProgress(exerciseId, { actualSets: Math.min(exercise.sets, exercise.actualSets + 1) });
     haptic();
   };
 
   const resetExercise = (exerciseId: string) => {
-    commitState({
-      ...state,
-      exercises: state.exercises.map((exercise) => (exercise.id === exerciseId ? { ...exercise, actualSets: 0 } : exercise))
-    });
+    void updateExerciseProgress(exerciseId, { actualSets: 0 });
     haptic("warning");
+  };
+
+  const updateExerciseWeight = (exerciseId: string, weight: string) => {
+    const normalized = weight.trim().replace(",", ".");
+    if (!normalized) return;
+    void updateExerciseProgress(exerciseId, { weight: normalized.match(/[а-яa-z%]/i) ? normalized : `${normalized} кг` });
+    haptic("success");
+    setToast("Рабочий вес сохранен");
+  };
+
+  const addCheckIn = async (input: { bodyWeightKg: number | null; energy: number; soreness: number; note: string }) => {
+    if (!activeSession) {
+      setToast("Сначала создайте тренировку");
+      return;
+    }
+    const targetStudentId = role === "coach" ? selectedStudent?.id ?? activeSession.studentId ?? state.students[0]?.id ?? state.user.id : state.user.id;
+    const checkin: CheckIn = {
+      id: id("checkin"),
+      sessionId: activeSession.id,
+      studentId: targetStudentId,
+      bodyWeightKg: input.bodyWeightKg,
+      energy: input.energy,
+      soreness: input.soreness,
+      note: input.note,
+      createdAt: todayIso()
+    };
+    const fallback = { ...state, checkins: [checkin, ...(state.checkins ?? [])] };
+    if (!remoteAvailable || isDemo) {
+      commitState(fallback);
+      haptic("success");
+      setToast("Чек-ин сохранен");
+      return;
+    }
+    try {
+      commitState(await api.addCheckIn({ ...input, sessionId: activeSession.id, studentId: targetStudentId }));
+      haptic("success");
+      setToast("Чек-ин синхронизирован");
+    } catch (error) {
+      commitState(fallback);
+      setToast(error instanceof Error ? error.message : "Чек-ин сохранен локально");
+    }
   };
 
   const sendMessage = async (body: string, context?: string | null) => {
@@ -850,6 +953,7 @@ export function App() {
           completion={completion}
           balance={visibleBalance}
           chartData={chartData}
+          latestCheckIn={latestCheckIn}
           onCreatePlan={handleCreatePlan}
           onCreateStudent={handleCreateStudent}
           selectedStudentId={selectedStudentId}
@@ -858,6 +962,8 @@ export function App() {
           onCompleteSession={(sessionId) => updateSessionStatus(sessionId, "done")}
           onMarkSet={markSet}
           onResetExercise={resetExercise}
+          onUpdateExerciseWeight={updateExerciseWeight}
+          onAddCheckIn={addCheckIn}
         />
       )}
       {tab === "plan" && (
@@ -911,6 +1017,7 @@ function HomeScreen(props: {
   completion: number;
   balance: number;
   chartData: Array<{ name: string; load: number; focus: number }>;
+  latestCheckIn: CheckIn | null;
   onCreatePlan: () => void;
   onCreateStudent: (name: string, goal: string) => void;
   selectedStudentId: string | null;
@@ -919,6 +1026,8 @@ function HomeScreen(props: {
   onCompleteSession: (sessionId: string) => void;
   onMarkSet: (exerciseId: string) => void;
   onResetExercise: (exerciseId: string) => void;
+  onUpdateExerciseWeight: (exerciseId: string, weight: string) => void;
+  onAddCheckIn: (input: { bodyWeightKg: number | null; energy: number; soreness: number; note: string }) => void;
 }) {
   if (props.role === "coach") {
     return <CoachHome {...props} />;
@@ -932,7 +1041,8 @@ function CoachHome({
   onCreatePlan,
   onCreateStudent,
   selectedStudentId,
-  onSelectStudent
+  onSelectStudent,
+  latestCheckIn
 }: {
   state: TrainingState;
   chartData: Array<{ name: string; load: number; focus: number }>;
@@ -940,6 +1050,7 @@ function CoachHome({
   onCreateStudent: (name: string, goal: string) => void;
   selectedStudentId: string | null;
   onSelectStudent: (studentId: string) => void;
+  latestCheckIn: CheckIn | null;
 }) {
   const risky = state.students.filter((student) => student.risk !== "green").length;
   const [studentDraft, setStudentDraft] = useState({ name: "", goal: "" });
@@ -982,6 +1093,26 @@ function CoachHome({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="panel insight-panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Контроль факта</span>
+            <h3>Последний чек-ин</h3>
+          </div>
+          <HeartPulse className="accent-icon" />
+        </div>
+        {latestCheckIn ? (
+          <div className="insight-grid">
+            <Metric icon={Scale} label="Вес тела" value={latestCheckIn.bodyWeightKg ? `${latestCheckIn.bodyWeightKg} кг` : "не указан"} hint={dateLabel(latestCheckIn.createdAt)} />
+            <Metric icon={Zap} label="Энергия" value={`${latestCheckIn.energy}/5`} hint="сегодня" tone={latestCheckIn.energy <= 2 ? "warn" : "ok"} />
+            <Metric icon={Activity} label="Забитость" value={`${latestCheckIn.soreness}/10`} hint="самочувствие" tone={latestCheckIn.soreness >= 7 ? "warn" : "ok"} />
+            <p className="insight-note">{latestCheckIn.note || "Комментария нет."}</p>
+          </div>
+        ) : (
+          <div className="empty-inline">Пока нет чек-инов ученика. Попросите заполнить вес и самочувствие перед тренировкой.</div>
+        )}
       </section>
 
       <section className="chart-panel">
@@ -1034,7 +1165,10 @@ function StudentHome({
   onStartSession,
   onCompleteSession,
   onMarkSet,
-  onResetExercise
+  onResetExercise,
+  onUpdateExerciseWeight,
+  onAddCheckIn,
+  latestCheckIn
 }: {
   activeSession?: Session;
   activeExercises: Exercise[];
@@ -1046,7 +1180,12 @@ function StudentHome({
   onCompleteSession: (sessionId: string) => void;
   onMarkSet: (exerciseId: string) => void;
   onResetExercise: (exerciseId: string) => void;
+  onUpdateExerciseWeight: (exerciseId: string, weight: string) => void;
+  onAddCheckIn: (input: { bodyWeightKg: number | null; energy: number; soreness: number; note: string }) => void;
+  latestCheckIn: CheckIn | null;
 }) {
+  const [editingWeight, setEditingWeight] = useState<Exercise | null>(null);
+
   if (!activeSession) {
     return (
       <div className="empty-state">
@@ -1105,7 +1244,11 @@ function StudentHome({
             <article className="exercise-card" key={exercise.id}>
               <div>
                 <strong>{exercise.name}</strong>
-                <span>{exercise.sets} × {exercise.reps} · {exercise.weight} · отдых {exercise.restSec} сек</span>
+                <span>{exercise.sets} × {exercise.reps} · отдых {exercise.restSec} сек</span>
+                <button className="weight-chip" onClick={() => setEditingWeight(exercise)} aria-label={`Изменить вес ${exercise.name}`}>
+                  <Scale size={14} />
+                  {exercise.weight}
+                </button>
                 <p>{exercise.notes}</p>
               </div>
               <div className="set-control">
@@ -1121,6 +1264,8 @@ function StudentHome({
           ))}
         </div>
       </section>
+
+      <CheckInPanel latestCheckIn={latestCheckIn} onAddCheckIn={onAddCheckIn} />
 
       <section className="chart-panel">
         <div className="section-title">
@@ -1145,7 +1290,113 @@ function StudentHome({
           </AreaChart>
         </ResponsiveContainer>
       </section>
+
+      {editingWeight && (
+        <WeightSheet
+          exercise={editingWeight}
+          onClose={() => setEditingWeight(null)}
+          onSave={(value) => {
+            onUpdateExerciseWeight(editingWeight.id, value);
+            setEditingWeight(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function WeightSheet({ exercise, onClose, onSave }: { exercise: Exercise; onClose: () => void; onSave: (value: string) => void }) {
+  const [value, setValue] = useState(exercise.weight.replace(/[^\d,.]/g, "") || exercise.weight);
+  const quick = ["-2.5", "+2.5", "+5"];
+  const numeric = Number(value.replace(",", "."));
+
+  const nudge = (delta: number) => {
+    const base = Number.isFinite(numeric) ? numeric : 0;
+    setValue(String(Math.max(0, base + delta)).replace(".", ","));
+  };
+
+  return (
+    <div className="sheet-backdrop" role="dialog" aria-modal="true">
+      <section className="sheet compact-sheet">
+        <button className="sheet-close" onClick={onClose} aria-label="Закрыть ввод веса">
+          <ArrowLeft size={18} />
+        </button>
+        <span className="eyebrow">Факт упражнения</span>
+        <h3>{exercise.name}</h3>
+        <label className="field-label" htmlFor="exercise-weight-input">Рабочий вес</label>
+        <input id="exercise-weight-input" aria-label="Рабочий вес" inputMode="decimal" value={value} onChange={(event) => setValue(event.target.value.replace(/[^\d,.]/g, ""))} />
+        <div className="quick-replies">
+          {quick.map((item) => (
+            <button key={item} onClick={() => nudge(Number(item))}>
+              {item} кг
+            </button>
+          ))}
+        </div>
+        <button className="primary-button full-width" onClick={() => onSave(value)}>
+          Сохранить вес
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function CheckInPanel({ latestCheckIn, onAddCheckIn }: { latestCheckIn: CheckIn | null; onAddCheckIn: (input: { bodyWeightKg: number | null; energy: number; soreness: number; note: string }) => void }) {
+  const [bodyWeight, setBodyWeight] = useState(latestCheckIn?.bodyWeightKg ? String(latestCheckIn.bodyWeightKg).replace(".", ",") : "");
+  const [energy, setEnergy] = useState(latestCheckIn?.energy ?? 4);
+  const [soreness, setSoreness] = useState(latestCheckIn?.soreness ?? 2);
+  const [note, setNote] = useState("");
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    const parsedWeight = Number(bodyWeight.replace(",", "."));
+    onAddCheckIn({
+      bodyWeightKg: Number.isFinite(parsedWeight) && parsedWeight > 0 ? Math.round(parsedWeight * 10) / 10 : null,
+      energy,
+      soreness,
+      note: note.trim()
+    });
+    setNote("");
+  };
+
+  return (
+    <section className="panel checkin-panel">
+      <div className="section-title">
+        <div>
+          <span className="eyebrow">Чек-ин</span>
+          <h3>Вес и самочувствие</h3>
+        </div>
+        <HeartPulse className="accent-icon" />
+      </div>
+      {latestCheckIn && (
+        <div className="latest-checkin">
+          <span>{dateLabel(latestCheckIn.createdAt)}</span>
+          <strong>{latestCheckIn.bodyWeightKg ? `${latestCheckIn.bodyWeightKg} кг` : "вес не указан"}</strong>
+          <small>энергия {latestCheckIn.energy}/5 · забитость {latestCheckIn.soreness}/10</small>
+        </div>
+      )}
+      <form className="checkin-form" onSubmit={submit}>
+        <label>
+          <span>Вес тела, кг</span>
+          <input aria-label="Вес тела" inputMode="decimal" placeholder="82,4" value={bodyWeight} onChange={(event) => setBodyWeight(event.target.value.replace(/[^\d,.]/g, ""))} />
+        </label>
+        <div className="rating-row" aria-label="Энергия">
+          <span>Энергия</span>
+          {[1, 2, 3, 4, 5].map((item) => (
+            <button type="button" className={energy === item ? "active" : ""} key={item} onClick={() => setEnergy(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+        <label>
+          <span>Боль/забитость: {soreness}/10</span>
+          <input aria-label="Боль или забитость" type="range" min="0" max="10" value={soreness} onChange={(event) => setSoreness(Number(event.target.value))} />
+        </label>
+        <input aria-label="Комментарий к самочувствию" placeholder="Сон, боль, что изменить..." value={note} onChange={(event) => setNote(event.target.value)} />
+        <button className="primary-button" type="submit">
+          Сохранить чек-ин
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -1457,6 +1708,7 @@ function MenuSheet({
   onOpenLesson: () => void;
 }) {
   const checklist = role === "coach" ? coachChecklist(state) : studentChecklist(state);
+  const modeAction = isDemo ? (remoteAvailable ? "Перейти к реальным данным" : "Создать локальные рабочие данные") : "Открыть демо-пример";
   return (
     <div className="sheet-backdrop" role="dialog" aria-modal="true">
       <section className="sheet">
@@ -1474,6 +1726,9 @@ function MenuSheet({
             {isDemo ? "Вкл" : "Выкл"}
           </button>
         </div>
+        <button className="primary-button full-width" onClick={() => onDemo(!isDemo)}>
+          {modeAction}
+        </button>
         <button className="wide-row" onClick={onOpenLesson}>
           <Sparkles size={19} />
           <span>Открыть обучение</span>
@@ -1503,6 +1758,7 @@ function trainingSteps(role: Role) {
     return [
       { title: "Сначала очередь внимания", text: "Главная показывает учеников с риском, ожидаемые оплаты и отчеты, чтобы тренер не искал проблемы вручную." },
       { title: "Создайте неделю из шаблона", text: "В плане нажмите «Неделя»: приложение создаст тренировку, упражнения и назначение первому ученику." },
+      { title: "Смотрите факт", text: "Рабочий вес, энергия, забитость и комментарий превращают план в отчет, по которому можно корректировать нагрузку." },
       { title: "Баланс без бухгалтерии", text: "Пополнения и списания хранятся в ledger. Для первого релиза это ручное подтверждение, без риска задвоить платеж." },
       { title: "Чат с контекстом", text: "Сообщение хранит тренировку, к которой относится вопрос. Это не заменяет Telegram, а убирает хаос вокруг отчетов." }
     ];
@@ -1510,6 +1766,8 @@ function trainingSteps(role: Role) {
   return [
     { title: "Откройте и поймите день", text: "На главной всегда один следующий шаг: начать тренировку, продолжить подходы или написать тренеру." },
     { title: "Отмечайте подходы", text: "Плюс справа отмечает подход. Минус сбрасывает упражнение, если ошиблись или начали заново." },
+    { title: "Записывайте вес", text: "Нажмите на вес в упражнении и внесите фактический рабочий вес. Тренеру не придется вытаскивать это из переписки." },
+    { title: "Сделайте чек-ин", text: "Вес тела, энергия и забитость помогают понять, когда прогрессировать, а когда восстановиться." },
     { title: "Завершите тренировку", text: "После завершения статус уйдет в историю, а тренер увидит выполнение и сможет ответить в чате." },
     { title: "Следите за пакетом", text: "Баланс показывает доступные средства/занятия и дает быстрое пополнение одной рукой." }
   ];
@@ -1568,6 +1826,7 @@ function coachChecklist(state: TrainingState) {
     { label: "Выбран режим тренера", done: state.user.role === "coach" },
     { label: "Можно добавить ученика", done: true },
     { label: "Есть список учеников и риски", done: state.students.length > 0 },
+    { label: "Тренер видит свежий чек-ин", done: (state.checkins ?? []).length > 0 },
     { label: "Можно создать план из шаблона", done: true },
     { label: "Есть контекстный чат", done: true },
     { label: "Есть ledger оплат", done: true },
@@ -1580,6 +1839,8 @@ function studentChecklist(state: TrainingState) {
     { label: "Выбран режим ученика", done: state.user.role === "student" },
     { label: "Виден следующий шаг на сегодня", done: state.sessions.length > 0 },
     { label: "Можно отмечать подходы", done: state.exercises.length > 0 },
+    { label: "Можно внести рабочий вес", done: state.exercises.length > 0 },
+    { label: "Можно сохранить вес тела и самочувствие", done: (state.checkins ?? []).length > 0 },
     { label: "Можно завершить тренировку", done: true },
     { label: "Можно написать тренеру", done: true },
     { label: "Можно пополнить баланс", done: true },

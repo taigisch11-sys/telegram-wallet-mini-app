@@ -46,7 +46,7 @@ app.use(
   "*",
   cors({
     origin: (origin, c) => {
-      const allowed = [c.env.FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"].filter(Boolean);
+      const allowed = [c.env.FRONTEND_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5176", "http://127.0.0.1:5176"].filter(Boolean);
       return allowed.includes(origin) ? origin : allowed[0] ?? origin;
     },
     allowHeaders: ["Content-Type", "Authorization", "X-Telegram-Bot-Api-Secret-Token"],

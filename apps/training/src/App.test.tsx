@@ -32,6 +32,31 @@ describe("training mini app", () => {
     expect(screen.getByText("1/4")).toBeInTheDocument();
   });
 
+  it("lets the student enter actual working weight from the workout card", async () => {
+    mockFetch();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Изменить вес Фронтальный присед/i }));
+    fireEvent.change(screen.getByLabelText("Рабочий вес"), { target: { value: "62,5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить вес" }));
+
+    expect(await screen.findByText("62.5 кг")).toBeInTheDocument();
+  });
+
+  it("saves body weight and wellbeing check-in", async () => {
+    mockFetch();
+    render(<App />);
+
+    fireEvent.change(await screen.findByLabelText("Вес тела"), { target: { value: "81,9" } });
+    fireEvent.click(screen.getByRole("button", { name: "5" }));
+    fireEvent.change(screen.getByLabelText("Боль или забитость"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Комментарий к самочувствию"), { target: { value: "Сон хороший" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить чек-ин" }));
+
+    expect(await screen.findByText("81.9 кг")).toBeInTheDocument();
+    expect(screen.getByText(/энергия 5\/5 · забитость 3\/10/i)).toBeInTheDocument();
+  });
+
   it("lets coach add a student from the main screen", async () => {
     mockFetch();
     render(<App />);
@@ -50,6 +75,7 @@ describe("training mini app", () => {
 
     fireEvent.click(await screen.findByLabelText("Открыть меню"));
     expect(screen.getByText("Демо-режим")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Создать локальные рабочие данные|Перейти к реальным данным/i })).toBeInTheDocument();
     fireEvent.click(screen.getByText("Открыть обучение"));
     expect(screen.getByText(/шаг 1/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Назад" })).toBeDisabled();

@@ -424,6 +424,11 @@ input:focus {
   box-shadow: 0 14px 34px rgba(183, 255, 42, 0.24);
 }
 
+.full-width {
+  width: 100%;
+  margin-top: 12px;
+}
+
 .secondary-button {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.07);
@@ -636,6 +641,22 @@ input:focus {
   font-size: 13px;
 }
 
+.weight-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 34px;
+  margin-top: 8px;
+  border: 1px solid rgba(183, 255, 42, 0.28);
+  border-radius: 999px;
+  padding: 0 11px;
+  color: var(--lime);
+  background: rgba(183, 255, 42, 0.09);
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .set-control {
   display: grid;
   grid-template-columns: 1fr;
@@ -657,6 +678,95 @@ input:focus {
 
 .set-control b {
   font-size: 18px;
+}
+
+.checkin-panel,
+.insight-panel {
+  overflow: hidden;
+}
+
+.latest-checkin {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(47, 231, 255, 0.18);
+  border-radius: 22px;
+  padding: 12px;
+  background: rgba(47, 231, 255, 0.07);
+}
+
+.latest-checkin span,
+.latest-checkin small,
+.field-label,
+.checkin-form span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.latest-checkin strong {
+  font-size: 22px;
+}
+
+.checkin-form {
+  display: grid;
+  gap: 12px;
+}
+
+.checkin-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.checkin-form input,
+.compact-sheet input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 0 14px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rating-row {
+  display: grid;
+  grid-template-columns: 74px repeat(5, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.rating-row button {
+  min-height: 38px;
+  border-radius: 14px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 900;
+}
+
+.rating-row button.active {
+  color: #07100a;
+  background: var(--lime);
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.insight-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-radius: 20px;
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.compact-sheet {
+  display: grid;
+  gap: 12px;
 }
 
 .timeline {
@@ -1128,6 +1238,11 @@ input:focus {
   }
 
   .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-grid,
+  .rating-row {
     grid-template-columns: 1fr;
   }
 
