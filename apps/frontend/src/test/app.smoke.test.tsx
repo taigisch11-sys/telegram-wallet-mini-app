@@ -3,67 +3,46 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app/App";
 
 describe("App", () => {
-  it("renders bottom navigation", () => {
+  it("starts with the new welcome screen", () => {
     render(<App />);
-    expect(screen.getAllByText("Финансы").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Графики").length).toBeGreaterThan(0);
+
+    expect(screen.getByText("PERSONAL FINANCE OS")).toBeInTheDocument();
+    expect(screen.getByText("Финансы без перегрузки и суеты.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Начать спокойно" })).toBeInTheDocument();
   });
 
-  it("gives a new user a first-run setup route instead of only zero balances", () => {
+  it("opens the main cabinet with the new bottom navigation", () => {
     render(<App />);
 
-    expect(screen.getByText("Быстрый старт")).toBeInTheDocument();
-    expect(screen.getByText("Добавьте первый счёт")).toBeInTheDocument();
-    expect(screen.getByText("Посмотреть демо")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Начать спокойно" }));
+
+    expect(screen.getByText("PRIVATE OPERATING MODE")).toBeInTheDocument();
+    expect(screen.getByLabelText("Дом")).toBeInTheDocument();
+    expect(screen.getByLabelText("Контур")).toBeInTheDocument();
+    expect(screen.getByLabelText("Аналитика")).toBeInTheDocument();
+    expect(screen.getByLabelText("Режим")).toBeInTheDocument();
   });
 
-  it("uses a finance toolbar instead of duplicated Telegram chrome", () => {
+  it("switches between editorial screens", () => {
     render(<App />);
 
-    expect(screen.queryByText("Закрыть")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Текущий месяц")).toHaveTextContent("Май 2026");
-    expect(screen.getByLabelText("Открыть быстрые действия")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Начать спокойно" }));
+    fireEvent.click(screen.getByLabelText("Контур"));
+    expect(screen.getByText("Контур активов и обязательств")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Аналитика"));
+    expect(screen.getByText("Динамика и опорные величины")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Режим"));
+    expect(screen.getByText("Режим и окружение")).toBeInTheDocument();
   });
 
-  it("opens real quick actions from the top plus button", () => {
+  it("can launch the demo concept from welcome", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Открыть быстрые действия"));
-    expect(screen.getByRole("button", { name: "Долговой счёт" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Посмотреть концепт" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Долговой счёт" }));
-    expect(screen.getByText("Долговые счета")).toBeInTheDocument();
-  });
-
-  it("connects primary wallet actions to real screens", () => {
-    render(<App />);
-
-    fireEvent.click(screen.getAllByText("Сверить")[0]);
-    expect(screen.getByText("Сохранить остатки")).toBeInTheDocument();
-
-    fireEvent.click(screen.getAllByText("Финансы")[0]);
-    fireEvent.click(screen.getAllByText("План")[0]);
-    expect(screen.getByText("Доходы")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("Меню"));
-    expect(screen.getByRole("heading", { name: "Меню" })).toBeInTheDocument();
-  });
-
-  it("keeps the menu tab active when history is open from the menu", () => {
-    render(<App />);
-
-    fireEvent.click(screen.getByLabelText("Меню"));
-    fireEvent.click(screen.getByRole("button", { name: "История" }));
-
-    expect(screen.getByLabelText("Меню")).toHaveClass("wallet-nav-item--active");
-  });
-
-  it("does not render duplicate Telegram chrome inside Telegram WebApp", () => {
-    window.Telegram = { WebApp: { initData: "query_id=test", ready: () => {}, expand: () => {}, close: () => {}, MainButton: { hide: () => {} } } };
-
-    render(<App />);
-
-    expect(screen.queryByText("Закрыть")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Меню")).toBeInTheDocument();
+    expect(screen.getByText("Демо-сценарий")).toBeInTheDocument();
+    expect(screen.getByText("Свободный контур на сейчас. Это главная сумма, на которую можно опираться без тревоги.")).toBeInTheDocument();
   });
 });

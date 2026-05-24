@@ -3,19 +3,14 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app/App";
 
 describe("Demo chart periods", () => {
-  it("recalculates demo chart data when the user changes period", () => {
+  it("opens demo mode and lets the user reach the analytics screen", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByLabelText("Меню"));
-    fireEvent.click(screen.getByText("Включить демо"));
-    fireEvent.click(screen.getAllByText("Графики")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Посмотреть концепт" }));
+    fireEvent.click(screen.getByLabelText("Аналитика"));
 
-    expect(screen.getByText("Месяц · 5 точек")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Неделя" }));
-    expect(screen.getByText("Неделя · 7 точек")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Квартал" }));
-    expect(screen.getByText("Квартал · 12 точек")).toBeInTheDocument();
+    expect(screen.getByText("Динамика и опорные величины")).toBeInTheDocument();
+    expect(screen.getByText("Net balance")).toBeInTheDocument();
+    expect(screen.getByText("Тренд")).toBeInTheDocument();
   });
 });

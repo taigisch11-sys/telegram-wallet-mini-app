@@ -19,6 +19,7 @@ describe("App loading fallback", () => {
         loading: true,
         error: null,
         refresh,
+        remoteAvailable: false,
         setData: vi.fn()
       })
     }));
@@ -26,7 +27,7 @@ describe("App loading fallback", () => {
     const { App } = await import("../app/App");
 
     render(<App />);
-    expect(screen.getByText("Загружаем финансы")).toBeInTheDocument();
+    expect(screen.getByText("Подключаю ваш финансовый контур.")).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(4200);
@@ -36,6 +37,6 @@ describe("App loading fallback", () => {
     expect(screen.getByRole("button", { name: "Открыть демо" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Продолжить локально" }));
-    expect(screen.getByText("Быстрый старт")).toBeInTheDocument();
+    expect(screen.getByText("PRIVATE OPERATING MODE")).toBeInTheDocument();
   }, 15000);
 });
