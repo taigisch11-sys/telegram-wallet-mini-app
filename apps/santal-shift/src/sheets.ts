@@ -1,6 +1,7 @@
 import type { Admin, AppState, Assignment, Branch, Payout, Shift, Story } from "./domain";
 import { createDemoState } from "./domain";
 import type { WorkerEnv } from "./env";
+import type { NotificationRecord } from "./notifications";
 
 export type SyncStatus = {
   connected: boolean;
@@ -302,6 +303,11 @@ export const SHEET_DEFINITIONS: SheetDefinition[] = [
     rows: []
   },
   {
+    name: "Уведомления",
+    headers: ["notification_key", "admin_id", "telegram_user_id", "type", "assignment_id", "shift_id", "message", "status", "sent_at"],
+    rows: []
+  },
+  {
     name: "Sync_State",
     headers: ["sync_key", "value", "updated_at", "updated_by"],
     rows: [["schema_version", "1", new Date().toISOString(), "system"]]
@@ -381,6 +387,38 @@ export async function setupSpreadsheet(env: WorkerEnv): Promise<{ createdSheets:
 export async function appendAudit(env: WorkerEnv, row: string[]): Promise<void> {
   if (!hasGoogleCredentials(env)) return;
   await appendValues(env, "Аудит_лог!A:K", [row]);
+}
+
+export async function loadNotificationKeys(env: WorkerEnv): Promise<Set<string>> {
+  if (!hasGoogleCredentials(env)) return new Set();
+  try {
+    const rows = await readValues(env, "Уведомления!A2:A");
+    return new Set(rows.map((row) => row[0]).filter(Boolean));
+  } catch (error) {
+    console.error(error);
+    return new Set();
+  }
+}
+
+export async function appendNotification(env: WorkerEnv, notification: NotificationRecord): Promise<void> {
+  if (!hasGoogleCredentials(env)) return;
+  try {
+    await appendValues(env, "Уведомления!A:I", [
+      [
+        notification.key,
+        notification.adminId,
+        notification.telegramUserId,
+        notification.type,
+        notification.assignmentId,
+        notification.shiftId,
+        notification.message,
+        notification.status,
+        notification.sentAt
+      ]
+    ]);
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 export async function appendAssignment(env: WorkerEnv, input: { assignment: Assignment; admin: Admin; shift: Shift; cancelReason?: string }): Promise<void> {

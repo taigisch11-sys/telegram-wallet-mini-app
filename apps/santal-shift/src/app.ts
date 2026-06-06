@@ -18,7 +18,8 @@ import {
   type Shift
 } from "./domain";
 import type { WorkerEnv } from "./env";
-import { appendAccrual, appendAssignment, appendAudit, loadState, setupSpreadsheet } from "./sheets";
+import { buildDailyNotification } from "./notifications";
+import { appendAccrual, appendAssignment, appendAudit, appendNotification, loadNotificationKeys, loadState, setupSpreadsheet } from "./sheets";
 import { callTelegramApi, verifyTelegramInitData } from "./telegram";
 import { renderAppHtml } from "./ui";
 
@@ -169,6 +170,7 @@ export function createApp() {
         "Шахматка",
         "Справочники",
         "Аудит_лог",
+        "Уведомления",
         "Sync_State"
       ]
     });
@@ -207,11 +209,21 @@ export async function handleScheduled(_: ScheduledController, env: WorkerEnv, ct
 async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
   const loaded = await currentState(env);
   memoryState = loaded.state;
+  const sentNotificationKeys = await loadNotificationKeys(env);
   for (const admin of memoryState.admins.filter((item) => item.status === "active" && item.canTakeShifts)) {
     const chatId = telegramChatId(admin.telegramUserId);
     if (!chatId) continue;
     const assistant = buildAssistantSummary(memoryState, admin);
-    await sendTelegramMessage(env, chatId, assistant.headline + "\n\n" + assistant.body, assistant.primaryAction);
+    const notification = buildDailyNotification(admin.id, String(chatId), assistant);
+    if (!notification || sentNotificationKeys.has(notification.key)) continue;
+    const sent = await sendTelegramMessage(env, chatId, notification.message, assistant.primaryAction);
+    if (!sent) continue;
+    sentNotificationKeys.add(notification.key);
+    await appendNotification(env, {
+      ...notification,
+      status: "sent",
+      sentAt: new Date().toISOString()
+    });
   }
 }
 
@@ -477,7 +489,7 @@ async function sendTelegramMessage(
   text: string,
   buttonText = "Открыть смены",
   webAppUrl = env.SANTAL_WEBAPP_URL
-): Promise<void> {
+): Promise<boolean> {
   try {
     await callTelegramApi(env.TELEGRAM_BOT_TOKEN, "sendMessage", {
       chat_id: chatId,
@@ -486,8 +498,10 @@ async function sendTelegramMessage(
         inline_keyboard: [[{ text: buttonText, web_app: { url: webAppUrl || "https://santal-shift-app.taigisch11.workers.dev/" } }]]
       }
     });
+    return true;
   } catch (error) {
     console.error(error);
+    return false;
   }
 }
 

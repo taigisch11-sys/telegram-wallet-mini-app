@@ -10,6 +10,22 @@ describe("Santal Shift Google Sheets schema", () => {
     }
   });
 
+  it("defines a notifications journal for durable Telegram notification dedupe", () => {
+    const notificationsSheet = SHEET_DEFINITIONS.find((definition) => definition.name === "Уведомления");
+
+    expect(notificationsSheet?.headers).toEqual([
+      "notification_key",
+      "admin_id",
+      "telegram_user_id",
+      "type",
+      "assignment_id",
+      "shift_id",
+      "message",
+      "status",
+      "sent_at"
+    ]);
+  });
+
   it("seeds assignments into the assignments sheet instead of payout rows", () => {
     const assignmentsSheet = SHEET_DEFINITIONS.find((definition) => definition.name === "Назначения");
 
