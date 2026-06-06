@@ -143,6 +143,8 @@ input:focus {
 
 .topbar h1,
 .hero-copy h2,
+.admin-hero h3,
+.student-360-panel h3,
 .panel h3,
 .workout-info h3,
 .balance-hero h3,
@@ -188,7 +190,8 @@ input:focus {
 .workout-card,
 .balance-hero,
 .calculator-card,
-.empty-state {
+.empty-state,
+.admin-hero {
   border: 1px solid var(--line);
   border-radius: 30px;
   background:
@@ -313,6 +316,7 @@ input:focus {
 
 .screen-stack {
   display: grid;
+  min-width: 0;
   gap: 14px;
   animation: riseIn 360ms ease both;
 }
@@ -330,8 +334,66 @@ input:focus {
   gap: 10px;
 }
 
+.admin-screen {
+  overflow-x: hidden;
+}
+
+.admin-hero {
+  min-width: 0;
+  overflow: hidden;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(183, 255, 42, 0.2), transparent 18rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.03)),
+    var(--surface);
+}
+
+.admin-hero p {
+  margin: -4px 0 16px;
+  color: var(--muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-kpi-grid .metric {
+  min-height: 104px;
+}
+
+.admin-ops-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: visible;
+  margin-top: 14px;
+  padding-bottom: 2px;
+}
+
+.admin-ops-strip span {
+  display: inline-flex;
+  flex: 1 1 118px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 36px;
+  border-radius: 999px;
+  padding: 0 11px;
+  color: var(--cyan);
+  background: rgba(47, 231, 255, 0.09);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .metric {
+  min-width: 0;
   min-height: 116px;
+  overflow: hidden;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -375,6 +437,7 @@ input:focus {
 .chart-panel,
 .quick-form,
 .calculator-card {
+  min-width: 0;
   padding: 18px;
 }
 
@@ -443,6 +506,7 @@ input:focus {
 }
 
 .student-card,
+.admin-student-row,
 .exercise-card,
 .timeline-item,
 .program-line,
@@ -470,6 +534,44 @@ input:focus {
   box-shadow: inset 0 0 0 1px rgba(183, 255, 42, 0.12);
 }
 
+.admin-roster {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-student-row {
+  grid-template-columns: 28px 52px minmax(0, 1fr) 82px;
+  width: 100%;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.admin-student-row.selected {
+  border-color: rgba(183, 255, 42, 0.48);
+  background:
+    linear-gradient(135deg, rgba(183, 255, 42, 0.11), rgba(255, 255, 255, 0.055)),
+    rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 0 0 1px rgba(183, 255, 42, 0.12);
+}
+
+.queue-number {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 1000;
+}
+
+.admin-student-main {
+  min-width: 0;
+}
+
+.admin-student-main strong,
 .student-card strong,
 .program-line strong,
 .transaction strong,
@@ -480,6 +582,8 @@ input:focus {
   text-overflow: ellipsis;
 }
 
+.admin-student-main span,
+.admin-student-main small,
 .student-card span,
 .program-line span,
 .transaction span,
@@ -488,6 +592,19 @@ input:focus {
 .timeline-item p,
 .workout-info p {
   color: var(--muted);
+}
+
+.admin-student-main span,
+.admin-student-main small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.admin-student-main small {
+  margin-top: 4px;
+  font-size: 12px;
 }
 
 .avatar {
@@ -500,6 +617,13 @@ input:focus {
   font-size: 20px;
   font-weight: 1000;
   background: var(--lime);
+}
+
+.avatar.large {
+  width: 68px;
+  height: 68px;
+  border-radius: 24px;
+  font-size: 28px;
 }
 
 .risk-yellow {
@@ -762,6 +886,139 @@ input:focus {
   padding: 12px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.06);
+}
+
+.student-360-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.student-360-head {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.student-360-head h3 {
+  margin-top: 6px;
+  font-size: 28px;
+}
+
+.student-360-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.risk-pill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.risk-pill-green {
+  color: var(--lime);
+  background: rgba(183, 255, 42, 0.1);
+}
+
+.risk-pill-yellow {
+  color: var(--orange);
+  background: rgba(255, 176, 32, 0.12);
+}
+
+.risk-pill-red {
+  color: var(--red);
+  background: rgba(255, 77, 77, 0.12);
+}
+
+.admin-checkin-card,
+.admin-message-preview {
+  border: 1px solid rgba(47, 231, 255, 0.18);
+  border-radius: 22px;
+  padding: 13px;
+  background: rgba(47, 231, 255, 0.07);
+}
+
+.admin-checkin-card.muted {
+  border-color: rgba(255, 176, 32, 0.22);
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.admin-checkin-card span,
+.admin-checkin-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-checkin-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 22px;
+}
+
+.admin-checkin-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.admin-message-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--cyan);
+}
+
+.admin-message-preview span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.admin-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-action-grid button {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  min-height: 92px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 10px 6px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.admin-action-grid button svg {
+  color: var(--lime);
+}
+
+.admin-action-grid strong,
+.admin-action-grid span {
+  display: block;
+}
+
+.admin-action-grid strong {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.admin-action-grid span {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .compact-sheet {
@@ -1123,6 +1380,10 @@ input:focus {
   margin-top: 16px;
 }
 
+.checklist.no-margin {
+  margin-top: 0;
+}
+
 .check-row {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr);
@@ -1213,6 +1474,10 @@ input:focus {
   backdrop-filter: blur(24px);
 }
 
+.bottom-nav-coach {
+  grid-template-columns: repeat(5, 1fr);
+}
+
 .bottom-nav button {
   display: grid;
   min-height: 56px;
@@ -1242,6 +1507,7 @@ input:focus {
   }
 
   .insight-grid,
+  .admin-kpi-grid,
   .rating-row {
     grid-template-columns: 1fr;
   }
@@ -1251,6 +1517,7 @@ input:focus {
   }
 
   .student-card,
+  .admin-student-row,
   .timeline-item,
   .exercise-card {
     grid-template-columns: 1fr;

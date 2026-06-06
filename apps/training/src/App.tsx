@@ -25,7 +25,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "rec
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Role = "coach" | "student";
-type Tab = "home" | "plan" | "chat" | "balance";
+type Tab = "home" | "admin" | "plan" | "chat" | "balance";
 type SessionStatus = "planned" | "in_progress" | "done" | "missed";
 type TransactionKind = "topup" | "charge" | "bonus";
 type TransactionStatus = "success" | "pending";
@@ -126,6 +126,18 @@ type TrainingState = {
   messages: ChatMessage[];
   transactions: BalanceTransaction[];
   checkins: CheckIn[];
+};
+
+const riskLabels: Record<Student["risk"], string> = {
+  green: "стабильно",
+  yellow: "внимание",
+  red: "срочно"
+};
+
+const riskPriority: Record<Student["risk"], number> = {
+  green: 0,
+  yellow: 2,
+  red: 4
 };
 
 declare global {
@@ -467,15 +479,16 @@ function RoleSwitch({ role, locked, onChange }: { role: Role; locked?: boolean; 
   );
 }
 
-function BottomNav({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
+function BottomNav({ tab, role, onChange }: { tab: Tab; role: Role; onChange: (tab: Tab) => void }) {
   const items: Array<{ tab: Tab; label: string; icon: typeof Activity }> = [
     { tab: "home", label: "Главная", icon: Activity },
+    ...(role === "coach" ? [{ tab: "admin" as const, label: "Штаб", icon: ShieldCheck }] : []),
     { tab: "plan", label: "План", icon: CalendarDays },
     { tab: "chat", label: "Чат", icon: MessageCircle },
     { tab: "balance", label: "Баланс", icon: WalletCards }
   ];
   return (
-    <nav className="bottom-nav" aria-label="Основное меню">
+    <nav className={`bottom-nav ${role === "coach" ? "bottom-nav-coach" : ""}`} aria-label="Основное меню">
       {items.map((item) => {
         const Icon = item.icon;
         return (
@@ -636,6 +649,12 @@ export function App() {
       setSelectedStudentId(state.students[0]?.id ?? null);
     }
   }, [role, selectedStudentId, state.students]);
+
+  useEffect(() => {
+    if (role !== "coach" && tab === "admin") {
+      setTab("home");
+    }
+  }, [role, tab]);
 
   const refreshFromApi = async (fallback: TrainingState) => {
     if (!remoteAvailable || isDemo) {
@@ -978,8 +997,24 @@ export function App() {
       )}
       {tab === "chat" && <ChatScreen role={role} state={state} selectedStudentId={selectedStudent?.id ?? null} onSelectStudent={setSelectedStudentId} activeSession={activeSession} onSend={sendMessage} />}
       {tab === "balance" && <BalanceScreen role={role} state={state} selectedStudent={selectedStudent} balance={visibleBalance} onTopUp={topUp} />}
+      {tab === "admin" && role === "coach" && (
+        <AdminScreen
+          state={state}
+          selectedStudent={selectedStudent}
+          selectedStudentId={selectedStudentId}
+          onSelectStudent={setSelectedStudentId}
+          onCreatePlan={handleCreatePlan}
+          onOpenChat={() => setTab("chat")}
+          onOpenBalance={() => setTab("balance")}
+          onOpenHome={() => setTab("home")}
+          onAskCheckIn={() => {
+            void sendMessage("Заполни, пожалуйста, чек-ин перед следующей тренировкой.", "Админ-панель");
+            setTab("chat");
+          }}
+        />
+      )}
 
-      <BottomNav tab={tab} onChange={setTab} />
+      <BottomNav tab={tab} role={role} onChange={setTab} />
 
       {menuOpen && (
         <MenuSheet
@@ -1033,6 +1068,18 @@ function HomeScreen(props: {
     return <CoachHome {...props} />;
   }
   return <StudentHome {...props} />;
+}
+
+function latestCheckInForStudent(state: TrainingState, studentId: string) {
+  return [...(state.checkins ?? [])]
+    .filter((checkin) => checkin.studentId === studentId)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0] ?? null;
+}
+
+function latestMessageForStudent(state: TrainingState, studentId: string) {
+  return [...state.messages]
+    .filter((message) => message.studentId === studentId)
+    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())[0] ?? null;
 }
 
 function CoachHome({
@@ -1151,6 +1198,252 @@ function CoachHome({
           Добавить
         </button>
       </form>
+    </div>
+  );
+}
+
+function AdminScreen({
+  state,
+  selectedStudent,
+  selectedStudentId,
+  onSelectStudent,
+  onCreatePlan,
+  onOpenChat,
+  onOpenBalance,
+  onOpenHome,
+  onAskCheckIn
+}: {
+  state: TrainingState;
+  selectedStudent: Student | null;
+  selectedStudentId: string | null;
+  onSelectStudent: (studentId: string) => void;
+  onCreatePlan: () => void;
+  onOpenChat: () => void;
+  onOpenBalance: () => void;
+  onOpenHome: () => void;
+  onAskCheckIn: () => void;
+}) {
+  const summaries = useMemo(
+    () =>
+      state.students
+        .map((student) => {
+          const sessions = state.sessions
+            .filter((session) => session.studentId === student.id)
+            .sort((left, right) => new Date(left.scheduledDate).getTime() - new Date(right.scheduledDate).getTime());
+          const latestCheckIn = latestCheckInForStudent(state, student.id);
+          const latestMessage = latestMessageForStudent(state, student.id);
+          const missedSessions = sessions.filter((session) => session.status === "missed").length;
+          const doneSessions = sessions.filter((session) => session.status === "done").length;
+          const plannedSessions = sessions.filter((session) => session.status === "planned" || session.status === "in_progress").length;
+          const nextSession = sessions.find((session) => session.status === "planned" || session.status === "in_progress") ?? sessions[0] ?? null;
+          const reasons = [
+            student.risk !== "green" ? riskLabels[student.risk] : null,
+            student.compliance < 75 ? `выполнение ${student.compliance}%` : null,
+            student.balance < 0 ? "баланс ниже нуля" : null,
+            latestCheckIn && latestCheckIn.energy <= 2 ? "низкая энергия" : null,
+            latestCheckIn && latestCheckIn.soreness >= 7 ? "высокая забитость" : null,
+            missedSessions > 0 ? `пропусков: ${missedSessions}` : null,
+            !latestCheckIn ? "нет чек-ина" : null
+          ].filter(Boolean) as string[];
+          const priority =
+            riskPriority[student.risk] +
+            (student.compliance < 75 ? 2 : 0) +
+            (student.balance < 0 ? 2 : 0) +
+            (latestCheckIn && latestCheckIn.energy <= 2 ? 1 : 0) +
+            (latestCheckIn && latestCheckIn.soreness >= 7 ? 1 : 0) +
+            missedSessions;
+
+          return {
+            student,
+            sessions,
+            latestCheckIn,
+            latestMessage,
+            nextSession,
+            reasons,
+            priority,
+            doneSessions,
+            plannedSessions
+          };
+        })
+        .sort((left, right) => right.priority - left.priority || left.student.name.localeCompare(right.student.name, "ru")),
+    [state]
+  );
+
+  const selectedSummary = summaries.find((summary) => summary.student.id === selectedStudent?.id) ?? summaries.find((summary) => summary.student.id === selectedStudentId) ?? summaries[0] ?? null;
+  const totalBalance = state.students.reduce((sum, student) => sum + student.balance, 0);
+  const attentionCount = summaries.filter((summary) => summary.priority > 0).length;
+  const averageCompliance = state.students.length ? Math.round(state.students.reduce((sum, student) => sum + student.compliance, 0) / state.students.length) : 0;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todaySessions = state.sessions.filter((session) => session.scheduledDate.slice(0, 10) === todayKey);
+  const checkinsToday = (state.checkins ?? []).filter((checkin) => checkin.createdAt.slice(0, 10) === todayKey).length;
+  const readiness = [
+    { label: "Есть список учеников и выбранный ученик", done: state.students.length > 0 && Boolean(selectedSummary) },
+    { label: "Видны риски, выполнение недели и очередь внимания", done: summaries.length > 0 },
+    { label: "Тренер видит чек-ины и факт самочувствия", done: (state.checkins ?? []).length > 0 },
+    { label: "Можно открыть чат по выбранному ученику", done: true },
+    { label: "Можно создать неделю из шаблона", done: true },
+    { label: "Можно открыть баланс и ledger ученика", done: true }
+  ];
+
+  return (
+    <div className="screen-stack admin-screen">
+      <section className="admin-hero">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Админ-панель</span>
+            <h3>Пульт тренера</h3>
+          </div>
+          <ShieldCheck className="accent-icon" />
+        </div>
+        <p>Один экран для ежедневного контроля: кто требует внимания, что с тренировками, чек-инами и оплатами.</p>
+        <div className="admin-kpi-grid">
+          <Metric icon={Users} label="Ученики" value={String(state.students.length)} hint="активных" />
+          <Metric icon={ShieldCheck} label="Внимание" value={String(attentionCount)} hint="приоритет" tone={attentionCount ? "warn" : "ok"} />
+          <Metric icon={CircleDollarSign} label="Баланс" value={rub(totalBalance)} hint="по базе" tone={totalBalance < 0 ? "warn" : "ok"} />
+          <Metric icon={Activity} label="Выполнение" value={`${averageCompliance}%`} hint="среднее" tone={averageCompliance < 75 ? "warn" : "ok"} />
+        </div>
+        <div className="admin-ops-strip">
+          <span><Dumbbell size={15} /> сегодня: {todaySessions.length}</span>
+          <span><HeartPulse size={15} /> чек-инов: {checkinsToday}</span>
+          <span><MessageCircle size={15} /> сообщений: {state.messages.length}</span>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Очередь внимания</span>
+            <h3>Кому нужен тренер</h3>
+          </div>
+          <span className="tiny-badge">{attentionCount ? `${attentionCount} задач` : "чисто"}</span>
+        </div>
+        <div className="admin-roster">
+          {summaries.map((summary, index) => (
+            <button className={`admin-student-row ${selectedSummary?.student.id === summary.student.id ? "selected" : ""}`} key={summary.student.id} onClick={() => onSelectStudent(summary.student.id)}>
+              <span className="queue-number">{index + 1}</span>
+              <div className={`avatar risk-${summary.student.risk}`}>{summary.student.name.slice(0, 1)}</div>
+              <div className="admin-student-main">
+                <strong>{summary.student.name}</strong>
+                <span>{summary.reasons[0] ?? "без тревог"} · {summary.student.goal}</span>
+                <small>{summary.nextSession ? `${summary.nextSession.title}, ${dateLabel(summary.nextSession.scheduledDate)}` : "тренировок пока нет"}</small>
+              </div>
+              <ProgressRing value={summary.student.compliance} label="неделя" />
+            </button>
+          ))}
+          {!summaries.length && (
+            <div className="empty-inline">
+              <Users />
+              <span>Пока нет учеников. Добавьте первого ученика и назначьте ему неделю.</span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {selectedSummary ? (
+        <section className="panel student-360-panel">
+          <div className="section-title compact">
+            <div>
+              <span className="eyebrow">Карточка 360</span>
+              <h3>Выбранный ученик</h3>
+            </div>
+          </div>
+          <div className="student-360-head">
+            <div className={`avatar large risk-${selectedSummary.student.risk}`}>{selectedSummary.student.name.slice(0, 1)}</div>
+            <div>
+              <span className={`risk-pill risk-pill-${selectedSummary.student.risk}`}>{riskLabels[selectedSummary.student.risk]}</span>
+              <h3>{selectedSummary.student.name}</h3>
+              <p>{selectedSummary.student.goal}</p>
+            </div>
+          </div>
+
+          <div className="insight-grid">
+            <Metric icon={WalletCards} label="Баланс" value={rub(selectedSummary.student.balance)} hint="ученика" tone={selectedSummary.student.balance < 0 ? "warn" : "ok"} />
+            <Metric icon={Check} label="Готово" value={String(selectedSummary.doneSessions)} hint="тренировок" />
+            <Metric icon={CalendarDays} label="В плане" value={String(selectedSummary.plannedSessions)} hint="сессий" />
+          </div>
+
+          {selectedSummary.latestCheckIn ? (
+            <div className="admin-checkin-card">
+              <span>{dateLabel(selectedSummary.latestCheckIn.createdAt)} · последний чек-ин</span>
+              <strong>{selectedSummary.latestCheckIn.bodyWeightKg ? `${selectedSummary.latestCheckIn.bodyWeightKg} кг` : "вес не указан"}</strong>
+              <small>энергия {selectedSummary.latestCheckIn.energy}/5 · забитость {selectedSummary.latestCheckIn.soreness}/10</small>
+              <p>{selectedSummary.latestCheckIn.note || "Комментария нет."}</p>
+            </div>
+          ) : (
+            <div className="admin-checkin-card muted">
+              <span>Чек-ин не найден</span>
+              <strong>Нужно запросить состояние</strong>
+              <small>вес, энергия, забитость и комментарий</small>
+            </div>
+          )}
+
+          {selectedSummary.latestMessage && (
+            <div className="admin-message-preview">
+              <MessageCircle size={17} />
+              <span>{selectedSummary.latestMessage.body}</span>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="empty-state admin-empty">
+          <Users size={42} />
+          <h3>Админка ждёт учеников</h3>
+          <p>Добавьте первого ученика, затем назначьте неделю, откройте чат и заведите баланс.</p>
+          <button className="primary-button" onClick={onOpenHome}>
+            <UserPlus size={18} />
+            Добавить ученика
+          </button>
+        </section>
+      )}
+
+      <section className="panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Действия</span>
+            <h3>Быстро по выбранному</h3>
+          </div>
+          <span className="tiny-badge">{selectedSummary?.student.name ?? "не выбран"}</span>
+        </div>
+        <div className="admin-action-grid">
+          <button aria-label="Создать неделю выбранному ученику" disabled={!selectedSummary} onClick={onCreatePlan}>
+            <Plus size={20} />
+            <strong>Неделя</strong>
+            <span>создать план</span>
+          </button>
+          <button aria-label="Открыть чат выбранного ученика" disabled={!selectedSummary} onClick={onOpenChat}>
+            <MessageCircle size={20} />
+            <strong>Чат</strong>
+            <span>ответить</span>
+          </button>
+          <button aria-label="Открыть баланс выбранного ученика" disabled={!selectedSummary} onClick={onOpenBalance}>
+            <WalletCards size={20} />
+            <strong>Баланс</strong>
+            <span>пополнить</span>
+          </button>
+          <button aria-label="Запросить чек-ин выбранного ученика" disabled={!selectedSummary} onClick={onAskCheckIn}>
+            <HeartPulse size={20} />
+            <strong>Чек-ин</strong>
+            <span>запросить</span>
+          </button>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-title">
+          <div>
+            <span className="eyebrow">Готовность релиза</span>
+            <h3>Контроль функций</h3>
+          </div>
+        </div>
+        <div className="checklist no-margin">
+          {readiness.map((item) => (
+            <div className="check-row" key={item.label}>
+              <span className={item.done ? "done" : ""}>{item.done ? <Check size={14} /> : ""}</span>
+              <p>{item.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

@@ -1,5 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 function mockFetch() {
@@ -13,6 +13,15 @@ function mockFetch() {
 }
 
 describe("training mini app", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("opens in demo mode and shows the student next action", async () => {
     mockFetch();
     render(<App />);
@@ -67,6 +76,37 @@ describe("training mini app", () => {
     fireEvent.click(screen.getByRole("button", { name: /Добавить/i }));
 
     expect(await screen.findByText("Денис")).toBeInTheDocument();
+  });
+
+  it("shows the trainer admin headquarters only for coach mode", async () => {
+    mockFetch();
+    render(<App />);
+
+    expect(screen.queryByRole("button", { name: /Штаб/i })).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Тренер" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Штаб/i }));
+
+    expect(await screen.findByText("Пульт тренера")).toBeInTheDocument();
+    expect(screen.getByText("Очередь внимания")).toBeInTheDocument();
+    expect(screen.getByText("Кому нужен тренер")).toBeInTheDocument();
+    expect(screen.getByText("Карточка 360")).toBeInTheDocument();
+  });
+
+  it("uses admin quick actions for selected student workflows", async () => {
+    mockFetch();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Тренер" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Штаб/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Запросить чек-ин выбранного ученика" }));
+    expect(await screen.findByText("Диалог с учеником")).toBeInTheDocument();
+    expect(await screen.findByText("Заполни, пожалуйста, чек-ин перед следующей тренировкой.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Штаб/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать неделю выбранному ученику" }));
+    expect(await screen.findByText("Шаблоны и назначения")).toBeInTheDocument();
   });
 
   it("has demo toggle, training guide and a back button in education", async () => {
