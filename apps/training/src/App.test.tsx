@@ -15,6 +15,7 @@ function mockFetch() {
 describe("training mini app", () => {
   beforeEach(() => {
     localStorage.clear();
+    window.history.replaceState({}, "", "/");
     vi.unstubAllGlobals();
   });
 
@@ -143,6 +144,34 @@ describe("training mini app", () => {
     fireEvent.click(balanceButtons[balanceButtons.length - 1]);
     expect(await screen.findByText(/Сначала выберите ученика/i)).toBeInTheDocument();
     expect(screen.getByText(/пополнение создаёт заявку/i)).toBeInTheDocument();
+  });
+
+  it("lets coach create an invite link from the main screen", async () => {
+    localStorage.setItem("training_demo", "false");
+    localStorage.setItem("training_role", "coach");
+    mockFetch();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Пригласить ученика/i }));
+
+    expect(await screen.findByText("Ссылка для ученика")).toBeInTheDocument();
+    expect(screen.getByText(/Код:/i)).toHaveTextContent(/TRN-/i);
+    expect(screen.getByText(/Отправьте ссылку ученику в Telegram/i)).toBeInTheDocument();
+  });
+
+  it("lets student accept an invite code from the URL in local fallback", async () => {
+    window.history.replaceState({}, "", "/?invite=fit123");
+    localStorage.setItem("training_demo", "false");
+    localStorage.setItem("training_role", "student");
+    mockFetch();
+    render(<App />);
+
+    expect(await screen.findByText("Приглашение тренера")).toBeInTheDocument();
+    expect(screen.getByText(/FIT123/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Принять приглашение/i }));
+
+    expect(await screen.findByText("Тренер по ссылке FIT123")).toBeInTheDocument();
+    expect(screen.getByText("Приглашение принято локально")).toBeInTheDocument();
   });
 
   it("supports chat and balance top up flows", async () => {

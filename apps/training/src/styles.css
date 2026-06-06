@@ -328,6 +328,92 @@ input:focus {
   font-size: 13px;
 }
 
+.invite-card,
+.connection-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 13px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  border: 1px solid rgba(183, 255, 42, 0.22);
+  border-radius: 28px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 0 0, rgba(183, 255, 42, 0.14), transparent 15rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.03)),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.invite-card-student {
+  border-color: rgba(47, 231, 255, 0.24);
+  background:
+    radial-gradient(circle at 0 0, rgba(47, 231, 255, 0.13), transparent 15rem),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.03)),
+    var(--surface);
+}
+
+.invite-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 18px;
+  color: #07100a;
+  background: linear-gradient(135deg, var(--lime), #eaff72);
+}
+
+.invite-card h3,
+.connection-card h3 {
+  margin: 5px 0 0;
+  font-size: 22px;
+  letter-spacing: -0.04em;
+}
+
+.invite-card p,
+.connection-card p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.invite-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.invite-result strong,
+.connection-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.invite-result small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.invite-result code {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
+  color: var(--cyan);
+  background: rgba(47, 231, 255, 0.07);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

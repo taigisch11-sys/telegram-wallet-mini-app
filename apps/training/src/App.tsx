@@ -105,6 +105,13 @@ type BalanceTransaction = {
   createdAt: string;
 };
 
+type TrainingInvite = {
+  code: string;
+  url: string;
+  expiresAt: string;
+  status?: "pending" | "accepted" | "expired" | "revoked";
+};
+
 type CheckIn = {
   id: string;
   sessionId: string | null;
@@ -145,6 +152,9 @@ declare global {
     Telegram?: {
       WebApp?: {
         initData?: string;
+        initDataUnsafe?: {
+          start_param?: string;
+        };
         version?: string;
         ready?: () => void;
         expand?: () => void;
@@ -162,6 +172,7 @@ const TOKEN_KEY = "training_jwt";
 const LOCAL_STATE_KEY = "training_local_state";
 const LOCAL_ROLE_KEY = "training_role";
 const LOCAL_DEMO_KEY = "training_demo";
+const LOCAL_INVITE_KEY = "training_pending_invite_code";
 
 function todayIso(offsetDays = 0) {
   const date = new Date();
@@ -183,6 +194,39 @@ function dateLabel(value: string) {
 
 function timeLabel(value: string) {
   return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function normalizeInviteCode(value?: string | null) {
+  return (value ?? "").trim().replace(/^TRN-/i, "").replace(/[^a-z0-9_-]/gi, "").toUpperCase();
+}
+
+function readInviteCodeFromLaunch() {
+  const search = new URLSearchParams(window.location.search);
+  const fromUrl = search.get("invite") ?? search.get("startapp") ?? search.get("tgWebAppStartParam");
+  const fromTelegram = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+  const normalized = normalizeInviteCode(fromUrl ?? fromTelegram ?? localStorage.getItem(LOCAL_INVITE_KEY));
+  if (normalized) localStorage.setItem(LOCAL_INVITE_KEY, normalized);
+  return normalized;
+}
+
+function inviteCodeLabel(code: string) {
+  return code.startsWith("TRN-") ? code : `TRN-${code}`;
+}
+
+function buildInviteUrl(code: string) {
+  const normalized = normalizeInviteCode(code);
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("invite", normalized);
+  return url.toString();
+}
+
+function localInvite() {
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const code = `TRN-${random}`;
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  return { code, url: buildInviteUrl(code), expiresAt };
 }
 
 function demoState(role: Role): TrainingState {
@@ -383,6 +427,8 @@ const api = {
   setRole: (role: Role) => request<TrainingState>("/training/api/role", { method: "PATCH", body: JSON.stringify({ role }) }),
   createStudent: (body: { name: string; goal: string }) =>
     request<TrainingState>("/training/api/students", { method: "POST", body: JSON.stringify(body) }),
+  createInvite: () => request<{ invite: TrainingInvite }>("/training/api/invites", { method: "POST", body: JSON.stringify({}) }),
+  acceptInvite: (code: string) => request<TrainingState>("/training/api/invites/accept", { method: "POST", body: JSON.stringify({ code }) }),
   createTemplatePlan: (studentId?: string | null) => request<TrainingState>("/training/api/plans/template", { method: "POST", body: JSON.stringify({ studentId }) }),
   updateSessionStatus: (sessionId: string, status: SessionStatus) =>
     request<TrainingState>(`/training/api/sessions/${sessionId}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
@@ -607,6 +653,9 @@ export function App() {
   const [lessonOpen, setLessonOpen] = useState(false);
   const [lessonStep, setLessonStep] = useState(0);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [pendingInviteCode, setPendingInviteCode] = useState(() => readInviteCodeFromLaunch());
+  const [createdInvite, setCreatedInvite] = useState<TrainingInvite | null>(null);
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   const ownBalance = useMemo(() => state.transactions.filter((transaction) => transaction.status === "success" && transaction.userId === state.user.id).reduce((sum, transaction) => sum + transaction.amount, 0), [state.transactions, state.user.id]);
   const activeSession = useMemo(
@@ -655,6 +704,12 @@ export function App() {
       setTab("home");
     }
   }, [role, tab]);
+
+  useEffect(() => {
+    if (pendingInviteCode && isDemo) {
+      setDemo(false);
+    }
+  }, [isDemo, pendingInviteCode, setDemo]);
 
   const refreshFromApi = async (fallback: TrainingState) => {
     if (!remoteAvailable || isDemo) {
@@ -903,6 +958,78 @@ export function App() {
     }
   };
 
+  const createInvite = async () => {
+    setInviteBusy(true);
+    try {
+      if (!remoteAvailable || isDemo) {
+        const invite = localInvite();
+        setCreatedInvite(invite);
+        haptic("success");
+        setToast("Ссылка создана локально");
+        return;
+      }
+      const result = await api.createInvite();
+      setCreatedInvite(result.invite);
+      haptic("success");
+      setToast("Ссылка создана");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Не удалось создать приглашение");
+      haptic("warning");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const copyInvite = async () => {
+    if (!createdInvite) return;
+    try {
+      await navigator.clipboard?.writeText(createdInvite.url);
+      setToast("Ссылка скопирована. Отправьте её ученику в Telegram.");
+      haptic("success");
+    } catch {
+      setToast("Скопируйте ссылку вручную");
+    }
+  };
+
+  const acceptInvite = async (code: string) => {
+    const normalized = normalizeInviteCode(code);
+    if (!normalized) return;
+    setInviteBusy(true);
+    try {
+      if (!remoteAvailable || isDemo) {
+        const fallback: TrainingState = {
+          ...state,
+          user: { ...state.user, role: "student" },
+          coach: {
+            id: `invite-coach-${normalized}`,
+            name: `Тренер по ссылке ${normalized}`,
+            username: null,
+            goal: "Персональное ведение",
+            risk: "green",
+            compliance: 100,
+            balance: 0
+          }
+        };
+        commitState(fallback);
+        localStorage.removeItem(LOCAL_INVITE_KEY);
+        setPendingInviteCode("");
+        setToast("Приглашение принято локально");
+        haptic("success");
+        return;
+      }
+      commitState(await api.acceptInvite(normalized));
+      localStorage.removeItem(LOCAL_INVITE_KEY);
+      setPendingInviteCode("");
+      setToast("Готово, вы привязаны к тренеру");
+      haptic("success");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Не удалось проверить приглашение. Код сохранён, попробуйте ещё раз.");
+      haptic("warning");
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="app-shell loading-shell">
@@ -962,6 +1089,33 @@ export function App() {
       <div className="toast-line" role="status">
         {toast}
       </div>
+
+      {role === "coach" && tab === "home" && (
+        <CoachInviteCard invite={createdInvite} busy={inviteBusy} onCreate={createInvite} onCopy={copyInvite} />
+      )}
+
+      {role === "student" && pendingInviteCode && (
+        <StudentInviteCard
+          code={pendingInviteCode}
+          busy={inviteBusy}
+          onAccept={acceptInvite}
+          onLater={() => {
+            localStorage.removeItem(LOCAL_INVITE_KEY);
+            setPendingInviteCode("");
+          }}
+        />
+      )}
+
+      {role === "student" && state.coach && !pendingInviteCode && (
+        <section className="connection-card">
+          <ShieldCheck size={20} />
+          <div>
+            <span className="eyebrow">Ваш тренер</span>
+            <strong>{state.coach.name}</strong>
+            <p>{state.coach.goal}</p>
+          </div>
+        </section>
+      )}
 
       {tab === "home" && (
         <HomeScreen
@@ -1981,6 +2135,85 @@ function BalanceScreen({
         </div>
       </section>
     </div>
+  );
+}
+
+function CoachInviteCard({
+  invite,
+  busy,
+  onCreate,
+  onCopy
+}: {
+  invite: TrainingInvite | null;
+  busy: boolean;
+  onCreate: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <section className="invite-card">
+      <div className="invite-icon">
+        <UserPlus size={22} />
+      </div>
+      <div>
+        <span className="eyebrow">Invite flow</span>
+        <h3>Пригласить ученика</h3>
+        <p>Создайте ссылку: ученик откроет её в Telegram и сам появится в вашем списке.</p>
+        {invite ? (
+          <div className="invite-result">
+            <strong>Ссылка для ученика</strong>
+            <p>Код: {inviteCodeLabel(invite.code)}</p>
+            <small>Действует до {dateLabel(invite.expiresAt)}. Отправьте ссылку ученику в Telegram.</small>
+            <code>{invite.url}</code>
+            <div className="invite-actions">
+              <button className="primary-button" onClick={onCopy}>
+                Скопировать ссылку
+              </button>
+              <button className="secondary-button" disabled={busy} onClick={onCreate}>
+                Создать новую
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="primary-button" disabled={busy} onClick={onCreate}>
+            {busy ? "Создаём..." : "Пригласить ученика"}
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StudentInviteCard({
+  code,
+  busy,
+  onAccept,
+  onLater
+}: {
+  code: string;
+  busy: boolean;
+  onAccept: (code: string) => void;
+  onLater: () => void;
+}) {
+  const label = inviteCodeLabel(code);
+  return (
+    <section className="invite-card invite-card-student">
+      <div className="invite-icon">
+        <ShieldCheck size={22} />
+      </div>
+      <div>
+        <span className="eyebrow">Приглашение тренера</span>
+        <h3>Принять приглашение</h3>
+        <p>Код {label}. После принятия тренер увидит вас в списке, сможет назначить план, чат и баланс.</p>
+        <div className="invite-actions">
+          <button className="primary-button" disabled={busy} onClick={() => onAccept(code)}>
+            {busy ? "Проверяем..." : "Принять приглашение"}
+          </button>
+          <button className="secondary-button" onClick={onLater}>
+            Позже
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 

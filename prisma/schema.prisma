@@ -283,6 +283,8 @@ model TrainingUser {
   coachMessages       TrainingChatMessage[]        @relation("TrainingMessageCoach")
   studentMessages     TrainingChatMessage[]        @relation("TrainingMessageStudent")
   balanceTransactions TrainingBalanceTransaction[]
+  createdInvites      TrainingInvite[]             @relation("TrainingInviteCoach")
+  acceptedInvites     TrainingInvite[]             @relation("TrainingInviteAccepted")
 
   @@index([role])
 }
@@ -322,20 +324,20 @@ model TrainingPlan {
 }
 
 model TrainingSession {
-  id            String             @id @default(cuid())
+  id            String               @id @default(cuid())
   planId        String?
   coachId       String
   studentId     String?
   title         String
   scheduledDate DateTime
-  status        String             @default("planned")
-  focus         String             @default("Сила")
-  durationMin   Int                @default(45)
-  intensity     Int                @default(6)
-  createdAt     DateTime           @default(now())
-  plan          TrainingPlan?      @relation(fields: [planId], references: [id], onDelete: Cascade)
-  coach         TrainingUser       @relation("TrainingSessionCoach", fields: [coachId], references: [id], onDelete: Cascade)
-  student       TrainingUser?      @relation("TrainingSessionStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  status        String               @default("planned")
+  focus         String               @default("Сила")
+  durationMin   Int                  @default(45)
+  intensity     Int                  @default(6)
+  createdAt     DateTime             @default(now())
+  plan          TrainingPlan?        @relation(fields: [planId], references: [id], onDelete: Cascade)
+  coach         TrainingUser         @relation("TrainingSessionCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  student       TrainingUser?        @relation("TrainingSessionStudent", fields: [studentId], references: [id], onDelete: SetNull)
   exercises     TrainingExercise[]
   logs          TrainingWorkoutLog[]
 
@@ -405,6 +407,23 @@ model TrainingBalanceTransaction {
   user      TrainingUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+}
+
+model TrainingInvite {
+  id               String        @id @default(cuid())
+  coachId          String
+  code             String        @unique
+  status           String        @default("pending")
+  expiresAt        DateTime
+  createdAt        DateTime      @default(now())
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  coach            TrainingUser  @relation("TrainingInviteCoach", fields: [coachId], references: [id], onDelete: Cascade)
+  acceptedBy       TrainingUser? @relation("TrainingInviteAccepted", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([coachId, createdAt])
+  @@index([status, expiresAt])
+  @@index([acceptedByUserId])
 }
 
 model TrainingTelegramUpdate {

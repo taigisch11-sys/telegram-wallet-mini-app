@@ -48,6 +48,9 @@ const checkInSchema = z.object({
 const templatePlanSchema = z.object({
   studentId: z.string().nullable().optional()
 });
+const acceptInviteSchema = z.object({
+  code: z.string().trim().min(3).max(40)
+});
 
 function trainingSecret(env: WorkerEnv) {
   if (!env.TRAINING_JWT_SECRET) throw new Error("TRAINING_JWT_SECRET is not configured");
@@ -119,6 +122,133 @@ function asNumber(value: unknown) {
 
 function userDisplayName(row: any) {
   return row.firstName || row.username || "Ученик";
+}
+
+function normalizeInviteCode(value?: string | null) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^invite[_-]/i, "")
+    .replace(/^TRN-/i, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase();
+}
+
+function generateInviteCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+function trainingWebAppUrl(env: WorkerEnv, inviteCode?: string | null) {
+  if (!env.TRAINING_TELEGRAM_WEBAPP_URL) return "";
+  const url = new URL(env.TRAINING_TELEGRAM_WEBAPP_URL);
+  const code = normalizeInviteCode(inviteCode);
+  if (code) url.searchParams.set("invite", code);
+  return url.toString();
+}
+
+async function createTrainingInvite(env: WorkerEnv, coach: TrainingUser) {
+  const db = sql(env);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = generateInviteCode();
+    try {
+      const rows = await db`
+        INSERT INTO "TrainingInvite" (id, "coachId", code, status, "expiresAt", "createdAt")
+        VALUES (${id()}, ${coach.id}, ${code}, 'pending', ${expiresAt}, NOW())
+        RETURNING code, status, "expiresAt"
+      `;
+      const invite = rows[0];
+      return {
+        code: invite.code,
+        status: invite.status,
+        expiresAt: invite.expiresAt,
+        url: trainingWebAppUrl(env, invite.code)
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!message.includes("TrainingInvite_code_key") && !message.includes("duplicate key")) throw error;
+    }
+  }
+
+  throw new Error("Не удалось создать уникальную ссылку приглашения");
+}
+
+async function acceptTrainingInvite(env: WorkerEnv, student: TrainingUser, rawCode: string) {
+  const code = normalizeInviteCode(rawCode);
+  if (!code) throw new Error("Пустой код приглашения");
+
+  const db = sql(env);
+  const inviteRows = await db`
+    SELECT i.id, i."coachId", i.code, i.status, i."expiresAt", i."acceptedByUserId", c.role AS "coachRole"
+    FROM "TrainingInvite" i
+    JOIN "TrainingUser" c ON c.id = i."coachId"
+    WHERE i.code = ${code}
+    LIMIT 1
+  `;
+  const invite = inviteRows[0] as
+    | {
+        id: string;
+        coachId: string;
+        code: string;
+        status: string;
+        expiresAt: string;
+        acceptedByUserId: string | null;
+        coachRole: string;
+      }
+    | undefined;
+
+  if (!invite) return { ok: false as const, status: 404, message: "Приглашение не найдено" };
+  if (student.role !== "student") return { ok: false as const, status: 403, message: "Приглашение может принять только ученик" };
+  if (invite.coachRole !== "coach") return { ok: false as const, status: 409, message: "Тренер в приглашении больше не активен" };
+  if (invite.coachId === student.id) return { ok: false as const, status: 409, message: "Нельзя принять собственное приглашение" };
+
+  if (invite.status === "accepted") {
+    if (invite.acceptedByUserId === student.id) return { ok: true as const };
+    return { ok: false as const, status: 409, message: "Эту ссылку уже использовали. Попросите новую." };
+  }
+  if (invite.status === "revoked") return { ok: false as const, status: 410, message: "Ссылка отменена. Попросите новую." };
+
+  const expiresAt = new Date(invite.expiresAt).getTime();
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    await db`
+      UPDATE "TrainingInvite"
+      SET status = 'expired'
+      WHERE id = ${invite.id} AND status = 'pending'
+    `;
+    return { ok: false as const, status: 410, message: "Ссылка истекла. Попросите новую." };
+  }
+
+  const activeLinks = await db`
+    SELECT "coachId"
+    FROM "TrainingCoachStudent"
+    WHERE "studentId" = ${student.id} AND status = 'active'
+    ORDER BY "joinedAt" DESC
+    LIMIT 1
+  `;
+  if (activeLinks[0] && activeLinks[0].coachId !== invite.coachId) {
+    return { ok: false as const, status: 409, message: "У вас уже есть активный тренер" };
+  }
+
+  const relationId = id();
+  const acceptedRows = await db`
+    WITH updated_invite AS (
+      UPDATE "TrainingInvite"
+      SET status = 'accepted', "acceptedAt" = NOW(), "acceptedByUserId" = ${student.id}
+      WHERE id = ${invite.id} AND status = 'pending' AND "expiresAt" > NOW()
+      RETURNING "coachId"
+    )
+    INSERT INTO "TrainingCoachStudent" (id, "coachId", "studentId", status, goal, risk, compliance, "joinedAt")
+    SELECT ${relationId}, "coachId", ${student.id}, 'active', 'Персональное ведение', 'green', 100, NOW()
+    FROM updated_invite
+    ON CONFLICT ("coachId", "studentId") DO UPDATE SET status = 'active'
+    RETURNING "coachId"
+  `;
+
+  if (!acceptedRows[0]) return { ok: false as const, status: 409, message: "Эту ссылку уже использовали. Попросите новую." };
+  return { ok: true as const };
 }
 
 async function trainingState(env: WorkerEnv, user: TrainingUser) {
@@ -417,10 +547,11 @@ async function wasTrainingUpdateProcessed(env: WorkerEnv, updateId: number) {
   }
 }
 
-async function sendTrainingStartMessage(env: WorkerEnv, chatId: number | string) {
+async function sendTrainingStartMessage(env: WorkerEnv, chatId: number | string, inviteCode?: string | null) {
   if (!env.TRAINING_TELEGRAM_BOT_TOKEN || !env.TRAINING_TELEGRAM_WEBAPP_URL) {
     throw new Error("Training Telegram bot is not configured");
   }
+  const webAppUrl = trainingWebAppUrl(env, inviteCode);
 
   try {
     await fetch(`https://api.telegram.org/bot${env.TRAINING_TELEGRAM_BOT_TOKEN}/setChatMenuButton`, {
@@ -450,7 +581,7 @@ async function sendTrainingStartMessage(env: WorkerEnv, chatId: number | string)
           [
             {
               text: "Открыть Тренировки",
-              web_app: { url: env.TRAINING_TELEGRAM_WEBAPP_URL }
+              web_app: { url: webAppUrl }
             }
           ]
         ]
@@ -503,8 +634,10 @@ export function registerTrainingRoutes(app: Hono<any>) {
     }
 
     const chatId = update.message?.chat?.id;
-    if (chatId && update.message?.text?.startsWith("/start")) {
-      await sendTrainingStartMessage(c.env, chatId);
+    const startText = update.message?.text ?? "";
+    if (chatId && startText.startsWith("/start")) {
+      const inviteCode = normalizeInviteCode(startText.split(/\s+/)[1]);
+      await sendTrainingStartMessage(c.env, chatId, inviteCode);
     }
 
     return c.json({ ok: true });
@@ -523,6 +656,21 @@ export function registerTrainingRoutes(app: Hono<any>) {
     return c.json(await trainingState(c.env, user));
   });
 
+  app.post("/training/api/invites", async (c) => {
+    const user = c.get("trainingUser") as TrainingUser;
+    if (user.role !== "coach") return c.json({ error: { message: "Приглашать учеников может только тренер" } }, 403);
+    const invite = await createTrainingInvite(c.env, user);
+    return c.json({ invite }, 201);
+  });
+
+  app.post("/training/api/invites/accept", async (c) => {
+    const user = c.get("trainingUser") as TrainingUser;
+    const body = acceptInviteSchema.parse(await c.req.json());
+    const result = await acceptTrainingInvite(c.env, user, body.code);
+    if (!result.ok) return c.json({ error: { message: result.message } }, result.status as any);
+    return c.json(await trainingState(c.env, user), 201);
+  });
+
   app.patch("/training/api/role", async (c) => {
     const user = c.get("trainingUser") as TrainingUser;
     const body = roleSchema.parse(await c.req.json());
@@ -536,6 +684,8 @@ export function registerTrainingRoutes(app: Hono<any>) {
           SELECT 1 FROM "TrainingChatMessage" WHERE "coachId" = ${user.id} OR "studentId" = ${user.id}
           UNION ALL
           SELECT 1 FROM "TrainingBalanceTransaction" WHERE "userId" = ${user.id}
+          UNION ALL
+          SELECT 1 FROM "TrainingInvite" WHERE "coachId" = ${user.id} OR "acceptedByUserId" = ${user.id}
         ) AS locked
       `;
       if (activity[0]?.locked) {
