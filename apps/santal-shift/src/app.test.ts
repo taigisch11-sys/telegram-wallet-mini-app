@@ -259,6 +259,41 @@ describe("Santal Shift worker API", () => {
     expect(response.status).toBe(403);
   });
 
+  it("moves an assignment through confirm, check-in and complete actions", async () => {
+    const app = createApp();
+    const headers = { "Content-Type": "application/json", "X-Demo-Admin-Id": "admin_nikita" };
+    const take = await app.request(
+      "/api/shifts/take",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ shiftId: "shift_20260521_csm9_assistant_evening" })
+      },
+      env
+    );
+    const takePayload = await take.json();
+    const assignmentId = takePayload.assignment.id;
+
+    expect(take.status).toBe(200);
+
+    for (const [action, expectedStatus] of [
+      ["confirm", "confirmed"],
+      ["check-in", "checked_in"],
+      ["complete", "completed"]
+    ]) {
+      const response = await app.request(
+        `/api/assignments/${assignmentId}/${action}`,
+        { method: "POST", headers, body: JSON.stringify({}) },
+        env
+      );
+      const payload = await response.json();
+      const item = payload.state.myShifts.find((entry: { assignment: { id: string } }) => entry.assignment.id === assignmentId);
+
+      expect(response.status).toBe(200);
+      expect(item.assignment.status).toBe(expectedStatus);
+    }
+  });
+
   it("sends a Telegram confirmation after taking a shift from Mini App in preview mode", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);

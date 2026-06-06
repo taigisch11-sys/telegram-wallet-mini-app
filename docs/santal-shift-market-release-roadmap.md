@@ -35,9 +35,11 @@
 - [ ] Обновить GitHub secret `SANTAL_TELEGRAM_BOT_TOKEN`.
 - [ ] Добавить GitHub secret `SANTAL_TELEGRAM_TOKEN_ROTATED_AT` в ISO-формате, например `2026-06-06T00:00:00.000Z`.
 - [ ] Создать или выбрать Google service account.
+- [ ] Включить Google Sheets API в Google Cloud проекте service account.
 - [ ] Выдать service account доступ редактора к таблице `1U4KsvYkrp5DzU4hCpmoOSZ_245lnI23qyg8ha-v9MMY`.
 - [ ] Добавить GitHub secret `SANTAL_GOOGLE_SERVICE_ACCOUNT_EMAIL`.
 - [ ] Добавить GitHub secret `SANTAL_GOOGLE_PRIVATE_KEY`.
+- [ ] Защитить header row и ID-колонки в Google Таблице от случайного редактирования.
 - [ ] Запустить workflow `Deploy Santal Shift Mini App` вручную через `workflow_dispatch`.
 - [ ] Проверить, что `/api/release/readiness` возвращает `ready: true` и `marketReadinessPercent: 100`.
 
@@ -75,6 +77,12 @@
 - [ ] Проверить webhook после нового деплоя.
 
 ## Автоматические gate-проверки
+
+Локальный preflight:
+
+```bash
+npm run santal:preflight
+```
 
 Endpoint:
 

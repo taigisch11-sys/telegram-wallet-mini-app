@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildScheduleBoard,
+  cancelAssignment,
   calculateShiftPay,
+  completeAssignment,
   createDemoState,
   deriveMoneySummary,
   takeShift
@@ -102,6 +104,24 @@ describe("Santal Shift domain", () => {
 
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("not_allowed_branch");
+  });
+
+  it("does not cancel an already completed assignment", () => {
+    const state = createDemoState("2026-05-20");
+    const completed = completeAssignment(state, {
+      assignmentId: "assign_20260520_csm4_olga",
+      adminId: "admin_olga",
+      nowIso: "2026-05-20T09:00:00.000Z"
+    });
+    const afterCancel = cancelAssignment(completed, {
+      assignmentId: "assign_20260520_csm4_olga",
+      adminId: "admin_olga",
+      nowIso: "2026-05-20T10:00:00.000Z",
+      reason: "test"
+    });
+
+    expect(afterCancel.assignments.find((assignment) => assignment.id === "assign_20260520_csm4_olga")?.status).toBe("completed");
+    expect(afterCancel.shifts.find((shift) => shift.id === "shift_20260520_csm4_assistant_day")?.assignedCount).toBe(1);
   });
 
   it("builds a branch-day schedule board for Google Sheets chessboard view", () => {

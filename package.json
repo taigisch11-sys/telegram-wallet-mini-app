@@ -17,7 +17,9 @@
     "qa:ai": "vitest run scripts/ai-qa/report-guard.test.ts && tsx scripts/ai-qa/run-suite.ts",
     "qa:ai:ux": "tsx scripts/ai-qa/run-agent.ts ux-critic",
     "qa:ai:finance": "tsx scripts/ai-qa/run-agent.ts financial-analyst",
+    "qa:browser": "playwright test qa/browser-smoke.spec.ts",
     "qa:release": "npm run qa:base && npm run qa:ai && tsx scripts/ai-qa/check-release-report.ts",
+    "santal:preflight": "node scripts/santal-release-preflight.mjs",
     "local:db:start": "powershell -ExecutionPolicy Bypass -File scripts/local-db-start.ps1",
     "local:db:stop": "powershell -ExecutionPolicy Bypass -File scripts/local-db-stop.ps1",
     "local:db:reset": "powershell -ExecutionPolicy Bypass -File scripts/local-db-reset.ps1",
@@ -28,6 +30,7 @@
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "prisma": "^6.8.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"

@@ -30,6 +30,15 @@ https://santal-shift-app.taigisch11.workers.dev/
 - `SANTAL_GOOGLE_SERVICE_ACCOUNT_EMAIL`
 - `SANTAL_GOOGLE_PRIVATE_KEY`
 
+Внешние шаги Google:
+
+1. Включить Google Sheets API в проекте Google Cloud.
+2. Создать отдельный service account, например `santal-shift-sync`.
+3. Создать JSON key и взять из него `client_email` и `private_key`.
+4. Выдать `client_email` права редактора на рабочую Google Таблицу.
+5. Добавить `client_email` в `SANTAL_GOOGLE_SERVICE_ACCOUNT_EMAIL`.
+6. Добавить `private_key` в `SANTAL_GOOGLE_PRIVATE_KEY`, сохранив переносы строк.
+
 После добавления секретов нужно вручную запустить GitHub Actions workflow `Deploy Santal Shift Mini App`. При ручном запуске workflow инициализирует структуру таблицы через:
 
 ```bash
@@ -80,6 +89,14 @@ Workflow настраивает:
 
 ## Проверка релиза
 
+Локальный preflight:
+
+```bash
+npm run santal:preflight
+```
+
+Он проверяет GitHub secrets, live readiness и печатает команды для завершения релиза после получения новых секретов.
+
 Endpoint readiness:
 
 ```bash
@@ -104,6 +121,10 @@ curl https://santal-shift-app.taigisch11.workers.dev/api/release/readiness
 ```
 
 Manual market release через GitHub Actions блокируется, если readiness меньше 100%.
+
+## Ограничение MVP
+
+Google Sheets используется как временное backoffice-хранилище и журнал. Для низкой конкуренции пилота этого достаточно, но для масштабирования запись смен лучше перенести в транзакционное хранилище, например PostgreSQL, Durable Object или очередь с сериализацией по `shiftId`.
 
 ## Дорожная карта до 100%
 

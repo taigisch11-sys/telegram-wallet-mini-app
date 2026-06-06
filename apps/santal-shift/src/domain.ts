@@ -494,7 +494,7 @@ export function takeShift(state: AppState, input: { shiftId: string; adminId: st
 
 export function cancelAssignment(state: AppState, input: { assignmentId: string; adminId: string; nowIso: string; reason?: string }): AppState {
   const assignment = state.assignments.find((item) => item.id === input.assignmentId && item.adminId === input.adminId);
-  if (!assignment || assignment.status === "cancelled") return state;
+  if (!assignment || assignment.status === "cancelled" || assignment.status === "completed") return state;
   const shift = state.shifts.find((item) => item.id === assignment.shiftId);
 
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SHEET_DEFINITIONS, dedupeLatestAssignments } from "./sheets";
+import { SHEET_DEFINITIONS, SHEETS_VALUE_INPUT_OPTION, dedupeLatestAssignments, sanitizeSheetCell } from "./sheets";
 
 describe("Santal Shift Google Sheets schema", () => {
   it("keeps every seed row aligned with its sheet headers", () => {
@@ -24,6 +24,15 @@ describe("Santal Shift Google Sheets schema", () => {
       "status",
       "sent_at"
     ]);
+  });
+
+  it("uses RAW writes and escapes formula-like user content before sending rows to Google Sheets", () => {
+    expect(SHEETS_VALUE_INPUT_OPTION).toBe("RAW");
+    expect(sanitizeSheetCell("=IMPORTXML(\"https://example.com\")")).toBe("'=IMPORTXML(\"https://example.com\")");
+    expect(sanitizeSheetCell("+79990000000")).toBe("'+79990000000");
+    expect(sanitizeSheetCell("-10")).toBe("'-10");
+    expect(sanitizeSheetCell("@admin")).toBe("'@admin");
+    expect(sanitizeSheetCell("Обычный текст")).toBe("Обычный текст");
   });
 
   it("seeds assignments into the assignments sheet instead of payout rows", () => {

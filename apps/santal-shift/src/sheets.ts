@@ -16,6 +16,8 @@ type SheetDefinition = {
   rows: string[][];
 };
 
+export const SHEETS_VALUE_INPUT_OPTION = "RAW";
+
 const demoState = createDemoState("2026-05-20");
 
 export const SHEET_DEFINITIONS: SheetDefinition[] = [
@@ -662,19 +664,27 @@ async function readValues(env: WorkerEnv, range: string): Promise<string[][]> {
 }
 
 async function updateValues(env: WorkerEnv, range: string, values: string[][]): Promise<void> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=${SHEETS_VALUE_INPUT_OPTION}`;
   await sheetsFetch(env, url, {
     method: "PUT",
-    body: JSON.stringify({ values })
+    body: JSON.stringify({ values: sanitizeSheetRows(values) })
   });
 }
 
 async function appendValues(env: WorkerEnv, range: string, values: string[][]): Promise<void> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${env.GOOGLE_SHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=${SHEETS_VALUE_INPUT_OPTION}&insertDataOption=INSERT_ROWS`;
   await sheetsFetch(env, url, {
     method: "POST",
-    body: JSON.stringify({ values })
+    body: JSON.stringify({ values: sanitizeSheetRows(values) })
   });
+}
+
+function sanitizeSheetRows(values: string[][]): string[][] {
+  return values.map((row) => row.map((cellValue) => sanitizeSheetCell(cellValue)));
+}
+
+export function sanitizeSheetCell(value: string): string {
+  return /^[=+\-@]/.test(value) ? `'${value}` : value;
 }
 
 async function sheetsFetch<T>(env: WorkerEnv, url: string, init: RequestInit = {}): Promise<T> {
