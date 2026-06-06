@@ -115,12 +115,34 @@ describe("training mini app", () => {
 
     fireEvent.click(await screen.findByLabelText("Открыть меню"));
     expect(screen.getByText("Демо-режим")).toBeInTheDocument();
+    expect(screen.getByText("Бета-статус")).toBeInTheDocument();
+    expect(screen.getByText("Что уже работает")).toBeInTheDocument();
+    expect(screen.getByText(/В MVP: приглашения учеников/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Создать локальные рабочие данные|Перейти к реальным данным/i })).toBeInTheDocument();
     fireEvent.click(screen.getByText("Открыть обучение"));
     expect(screen.getByText(/шаг 1/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Назад" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Далее" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Назад" })).not.toBeDisabled());
+  });
+
+  it("shows clear empty states for local coach beta setup", async () => {
+    localStorage.setItem("training_demo", "false");
+    localStorage.setItem("training_role", "coach");
+    mockFetch();
+    render(<App />);
+
+    expect(await screen.findByText("Пока нет учеников")).toBeInTheDocument();
+    expect(screen.getByText(/Добавьте первого ученика ниже/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Пока нет учеников/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Штаб/i }));
+    expect(await screen.findByText("Админка ждёт учеников")).toBeInTheDocument();
+
+    const balanceButtons = screen.getAllByRole("button", { name: /Баланс/i });
+    fireEvent.click(balanceButtons[balanceButtons.length - 1]);
+    expect(await screen.findByText(/Сначала выберите ученика/i)).toBeInTheDocument();
+    expect(screen.getByText(/пополнение создаёт заявку/i)).toBeInTheDocument();
   });
 
   it("supports chat and balance top up flows", async () => {
@@ -133,9 +155,11 @@ describe("training mini app", () => {
     expect(await screen.findByText("Нужна замена")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Баланс"));
+    expect(screen.getByText(/пополнение создаёт заявку/i)).toBeInTheDocument();
     fireEvent.click(screen.getByText("8 занятий"));
     expect(screen.getByText(/Создать заявку на пополнение.*16/)).toBeInTheDocument();
+    expect(screen.getByText(/не реальное списание денег/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить" }));
-    expect(await screen.findByText("Баланс пополнен в демо-режиме")).toBeInTheDocument();
+    expect(await screen.findByText("Заявка на пополнение создана в демо-режиме")).toBeInTheDocument();
   });
 });

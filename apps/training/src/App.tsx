@@ -890,7 +890,7 @@ export function App() {
     if (!remoteAvailable || isDemo) {
       commitState(fallback);
       haptic("success");
-      setToast("Баланс пополнен в демо-режиме");
+      setToast("Заявка на пополнение создана в демо-режиме");
       return;
     }
     try {
@@ -1129,16 +1129,24 @@ function CoachHome({
           </button>
         </div>
         <div className="attention-list">
-          {(state.students.length ? state.students : [{ id: "empty", name: "Пока нет учеников", goal: "Добавьте первого ученика ниже", risk: "yellow" as const, compliance: 0, balance: 0, username: null }]).map((student) => (
-            <button className={`student-card ${selectedStudentId === student.id ? "selected" : ""}`} key={student.id} onClick={() => onSelectStudent(student.id)}>
-              <div className={`avatar risk-${student.risk}`}>{student.name.slice(0, 1)}</div>
-              <div>
-                <strong>{student.name}</strong>
-                <span>{student.goal}</span>
-              </div>
-              <ProgressRing value={student.compliance} label="неделя" />
-            </button>
-          ))}
+          {state.students.length ? (
+            state.students.map((student) => (
+              <button className={`student-card ${selectedStudentId === student.id ? "selected" : ""}`} key={student.id} onClick={() => onSelectStudent(student.id)}>
+                <div className={`avatar risk-${student.risk}`}>{student.name.slice(0, 1)}</div>
+                <div>
+                  <strong>{student.name}</strong>
+                  <span>{student.goal}</span>
+                </div>
+                <ProgressRing value={student.compliance} label="неделя" />
+              </button>
+            ))
+          ) : (
+            <div className="empty-panel">
+              <Users size={28} />
+              <strong>Пока нет учеников</strong>
+              <span>Добавьте первого ученика ниже. После этого появятся очередь внимания, чат, планы и баланс.</span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1886,6 +1894,10 @@ function BalanceScreen({
         <span className="eyebrow">{role === "coach" ? `Баланс: ${targetName}` : "Ваш пакет"}</span>
         <h3>{rub(balance)}</h3>
         <p>{role === "coach" ? "Пополнение и история относятся только к выбранному ученику." : balance >= 0 ? "Доступно для занятий и проверок" : "Нужно пополнить до следующей тренировки"}</p>
+        <div className="beta-warning-card">
+          <CircleDollarSign size={18} />
+          <span>Бета: пополнение создаёт заявку и ledger-запись. Деньги реально не списываются без подключённого платёжного провайдера.</span>
+        </div>
         {role === "coach" && !selectedStudent && <p className="warning-text">Сначала выберите ученика на главном экране.</p>}
         <div className="balance-actions">
           {packages.map((item) => (
@@ -1902,7 +1914,7 @@ function BalanceScreen({
           <div>
             <span className="eyebrow">Подтверждение</span>
             <h3>{pendingTopUp.note}</h3>
-            <p>Создать заявку на пополнение {targetName} на {rub(pendingTopUp.amount)}?</p>
+            <p>Создать заявку на пополнение {targetName} на {rub(pendingTopUp.amount)}? Это не реальное списание денег; заявка нужна для учёта и подтверждения.</p>
           </div>
           <div className="confirm-actions">
             <button className="secondary-button" onClick={() => setPendingTopUp(null)}>
@@ -2027,6 +2039,26 @@ function MenuSheet({
           <span>Открыть обучение</span>
           <ChevronRight size={18} />
         </button>
+        <div className="release-card">
+          <div>
+            <span className="eyebrow">Бета-статус</span>
+            <strong>Что уже работает</strong>
+          </div>
+          <ul className="release-list">
+            <li>
+              <Check size={14} />
+              <span>Тренировки, подходы, рабочий вес и чек-ин.</span>
+            </li>
+            <li>
+              <Check size={14} />
+              <span>Штаб тренера, чат и ledger баланса.</span>
+            </li>
+            <li>
+              <Zap size={14} />
+              <span>В MVP: приглашения учеников, реальные платежи и редактор планов.</span>
+            </li>
+          </ul>
+        </div>
         <div className="checklist">
           <div className="section-title compact">
             <div>
