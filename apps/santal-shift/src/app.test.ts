@@ -89,7 +89,7 @@ describe("Santal Shift worker API", () => {
     expect(response.status).toBe(401);
   });
 
-  it("opens a Telegram demo session while Google Sheets credentials are missing", async () => {
+  it("rejects production bootstrap when Google Sheets storage is not connected", async () => {
     const app = createApp();
     const initData = await signedTelegramInitData({ id: 42, first_name: "Анна" }, env.TELEGRAM_BOT_TOKEN);
     const response = await app.request(
@@ -105,9 +105,11 @@ describe("Santal Shift worker API", () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(payload.state.sync.connected).toBe(false);
-    expect(payload.state.admin.status).toBe("active");
+    expect(response.status).toBe(503);
+    expect(payload).toMatchObject({
+      ok: false,
+      message: "Хранилище данных не подключено. Попросите координатора завершить настройку Google Sheets."
+    });
   });
 
   it("reports release readiness without leaking secret values", async () => {
@@ -127,9 +129,39 @@ describe("Santal Shift worker API", () => {
 
     expect(response.status).toBe(200);
     expect(payload.ready).toBe(false);
+    expect(payload.marketReadinessPercent).toBeLessThan(100);
+    expect(payload.criticalBlockers.map((blocker: { id: string }) => blocker.id)).toEqual([
+      "telegramTokenRotation",
+      "googleServiceAccountEmail",
+      "googlePrivateKey"
+    ]);
+    expect(payload.nextActions.length).toBeGreaterThan(0);
     expect(payload.checks.googleServiceAccountEmail.ok).toBe(false);
     expect(payload.checks.googlePrivateKey.ok).toBe(false);
     expect(JSON.stringify(payload)).not.toContain("test-secret");
+  });
+
+  it("reports full market readiness when all production gates are configured", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "/api/release/readiness",
+      {},
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false",
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "santal-service@example.iam.gserviceaccount.com",
+        GOOGLE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
+        TELEGRAM_TOKEN_ROTATED_AT: "2026-06-06T00:00:00.000Z"
+      }
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.ready).toBe(true);
+    expect(payload.marketReadinessPercent).toBe(100);
+    expect(payload.criticalBlockers).toEqual([]);
+    expect(payload.nextActions).toEqual([]);
   });
 
   it("answers Telegram bot commands and ignores duplicate update ids", async () => {
@@ -162,7 +194,7 @@ describe("Santal Shift worker API", () => {
     expect(body.reply_markup.inline_keyboard[0][0].web_app.url).toBe(env.SANTAL_WEBAPP_URL);
   });
 
-  it("sends a Telegram confirmation after taking a shift from Mini App", async () => {
+  it("rejects production shift mutations while Google Sheets storage is disconnected", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
     const app = createApp();
@@ -179,6 +211,71 @@ describe("Santal Shift worker API", () => {
         ...env,
         APP_ENV: "production",
         ALLOW_WEB_PREVIEW: "false",
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "",
+        GOOGLE_PRIVATE_KEY: ""
+      }
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      message: "Хранилище данных не подключено. Попросите координатора завершить настройку Google Sheets."
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the production Telegram webhook secret is missing", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "/api/telegram/webhook",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ update_id: 1 }) },
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false",
+        TELEGRAM_WEBHOOK_SECRET: ""
+      }
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      message: "Telegram webhook secret не настроен"
+    });
+  });
+
+  it("rejects Telegram webhook calls with a wrong secret", async () => {
+    const app = createApp();
+    const response = await app.request(
+      "/api/telegram/webhook",
+      { method: "POST", headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "wrong" }, body: JSON.stringify({ update_id: 1 }) },
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false"
+      }
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("sends a Telegram confirmation after taking a shift from Mini App in preview mode", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = createApp();
+    const initData = await signedTelegramInitData({ id: 42, first_name: "Анна" }, env.TELEGRAM_BOT_TOKEN);
+
+    const response = await app.request(
+      "/api/shifts/take",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftId: "shift_20260522_csm10_admin_full", initData })
+      },
+      {
+        ...env,
+        APP_ENV: "test",
+        ALLOW_WEB_PREVIEW: "true",
         GOOGLE_SERVICE_ACCOUNT_EMAIL: "",
         GOOGLE_PRIVATE_KEY: ""
       }

@@ -5,6 +5,7 @@ export type WorkerEnv = {
   GOOGLE_PRIVATE_KEY?: string;
   SANTAL_WEBAPP_URL?: string;
   TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_TOKEN_ROTATED_AT?: string;
   TELEGRAM_WEBHOOK_SECRET?: string;
   ADMIN_SETUP_TOKEN?: string;
   ALLOW_WEB_PREVIEW?: string;

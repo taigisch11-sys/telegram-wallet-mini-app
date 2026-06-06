@@ -28,6 +28,7 @@ type StateSync = Awaited<ReturnType<typeof loadState>>["sync"];
 
 let memoryState: AppState = createDemoState("2026-05-20");
 const processedUpdates = new Set<number>();
+const productionStorageMessage = "Хранилище данных не подключено. Попросите координатора завершить настройку Google Sheets.";
 
 export function createApp() {
   const app = new Hono<AppBindings>();
@@ -41,8 +42,8 @@ export function createApp() {
   app.get("/api/release/readiness", (c) => c.json(buildReleaseReadiness(c.env)));
 
   app.get("/api/bootstrap", async (c) => {
-    const { state, sync } = await currentState(c.env);
     const identity = await resolveIdentity(c.env, c.req.header("X-Telegram-Init-Data"), c.req.header("X-Demo-Admin-Id"));
+    const { state, sync } = await currentState(c.env);
     const admin = identity.telegramUser
       ? findAuthorizedAdmin(state, identity.telegramUser.id, c.env, sync)
       : findAdminOrDefault(state, identity.demoAdminId);
@@ -178,6 +179,9 @@ export function createApp() {
 
   app.post("/api/telegram/webhook", async (c) => {
     const secret = c.req.header("X-Telegram-Bot-Api-Secret-Token");
+    if (isStrictProduction(c.env) && !c.env.TELEGRAM_WEBHOOK_SECRET) {
+      return c.json({ ok: false, message: "Telegram webhook secret не настроен" }, 503);
+    }
     if (c.env.TELEGRAM_WEBHOOK_SECRET && secret !== c.env.TELEGRAM_WEBHOOK_SECRET) {
       return c.json({ ok: false }, 403);
     }
@@ -207,7 +211,11 @@ export async function handleScheduled(_: ScheduledController, env: WorkerEnv, ct
 }
 
 async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
-  const loaded = await currentState(env);
+  const loaded = await currentState(env).catch((error) => {
+    console.error(error);
+    return undefined;
+  });
+  if (!loaded) return;
   memoryState = loaded.state;
   const sentNotificationKeys = await loadNotificationKeys(env);
   for (const admin of memoryState.admins.filter((item) => item.status === "active" && item.canTakeShifts)) {
@@ -230,6 +238,7 @@ async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
 async function currentState(env: WorkerEnv): Promise<{ state: AppState; sync: StateSync }> {
   const loaded = await loadState(env);
   if (loaded.sync.connected) return loaded;
+  if (isStrictProduction(env)) throw new Error(productionStorageMessage);
   return { state: memoryState, sync: loaded.sync };
 }
 
@@ -260,35 +269,44 @@ function findAuthorizedAdmin(
   throw new Error("Ваш Telegram не найден в листе «Администраторы» или профиль не активен");
 }
 
-function errorStatus(error: unknown): 401 | 403 | 500 {
+function errorStatus(error: unknown): 401 | 403 | 500 | 503 {
   const message = error instanceof Error ? error.message : "";
   if (message.includes("Откройте приложение") || message.includes("Telegram init data") || message.includes("Telegram initData") || message.includes("Invalid Telegram")) return 401;
   if (message.includes("Telegram не найден") || message.includes("профиль не активен")) return 403;
+  if (message.includes("Хранилище данных не подключено") || message.includes("Google Sheets credentials")) return 503;
   return 500;
 }
 
 function buildReleaseReadiness(env: WorkerEnv) {
   const checks = {
-    appEnvProduction: releaseCheck(env.APP_ENV === "production", "APP_ENV должен быть production"),
-    webPreviewDisabled: releaseCheck(env.ALLOW_WEB_PREVIEW !== "true", "ALLOW_WEB_PREVIEW должен быть выключен"),
-    webAppUrl: releaseCheck(isHttpsUrl(env.SANTAL_WEBAPP_URL), "SANTAL_WEBAPP_URL должен быть HTTPS URL"),
-    telegramBotToken: releaseCheck(hasValue(env.TELEGRAM_BOT_TOKEN), "TELEGRAM_BOT_TOKEN задан"),
-    telegramWebhookSecret: releaseCheck(hasValue(env.TELEGRAM_WEBHOOK_SECRET), "TELEGRAM_WEBHOOK_SECRET задан"),
-    adminSetupToken: releaseCheck(hasValue(env.ADMIN_SETUP_TOKEN), "ADMIN_SETUP_TOKEN задан"),
-    googleSheetId: releaseCheck(hasValue(env.GOOGLE_SHEET_ID), "GOOGLE_SHEET_ID задан"),
-    googleServiceAccountEmail: releaseCheck(hasValue(env.GOOGLE_SERVICE_ACCOUNT_EMAIL), "GOOGLE_SERVICE_ACCOUNT_EMAIL задан"),
-    googlePrivateKey: releaseCheck(hasValue(env.GOOGLE_PRIVATE_KEY), "GOOGLE_PRIVATE_KEY задан")
+    appEnvProduction: releaseCheck("appEnvProduction", env.APP_ENV === "production", "APP_ENV должен быть production", "Установить APP_ENV=production в Worker."),
+    webPreviewDisabled: releaseCheck("webPreviewDisabled", env.ALLOW_WEB_PREVIEW !== "true", "ALLOW_WEB_PREVIEW должен быть выключен", "Установить ALLOW_WEB_PREVIEW=false для публичного релиза."),
+    webAppUrl: releaseCheck("webAppUrl", isHttpsUrl(env.SANTAL_WEBAPP_URL), "SANTAL_WEBAPP_URL должен быть HTTPS URL", "Указать публичный HTTPS URL Mini App."),
+    telegramBotToken: releaseCheck("telegramBotToken", hasValue(env.TELEGRAM_BOT_TOKEN), "TELEGRAM_BOT_TOKEN задан", "Добавить SANTAL_TELEGRAM_BOT_TOKEN в GitHub secrets."),
+    telegramTokenRotation: releaseCheck("telegramTokenRotation", hasValue(env.TELEGRAM_TOKEN_ROTATED_AT), "Telegram bot token должен быть перевыпущен перед рынком", "Перевыпустить токен в BotFather, обновить SANTAL_TELEGRAM_BOT_TOKEN и задать SANTAL_TELEGRAM_TOKEN_ROTATED_AT."),
+    telegramWebhookSecret: releaseCheck("telegramWebhookSecret", hasValue(env.TELEGRAM_WEBHOOK_SECRET), "TELEGRAM_WEBHOOK_SECRET задан", "Добавить SANTAL_TELEGRAM_WEBHOOK_SECRET в GitHub secrets."),
+    adminSetupToken: releaseCheck("adminSetupToken", hasValue(env.ADMIN_SETUP_TOKEN), "ADMIN_SETUP_TOKEN задан", "Добавить SANTAL_ADMIN_SETUP_TOKEN в GitHub secrets."),
+    googleSheetId: releaseCheck("googleSheetId", hasValue(env.GOOGLE_SHEET_ID), "GOOGLE_SHEET_ID задан", "Указать id рабочей Google таблицы в wrangler.toml."),
+    googleServiceAccountEmail: releaseCheck("googleServiceAccountEmail", hasValue(env.GOOGLE_SERVICE_ACCOUNT_EMAIL), "GOOGLE_SERVICE_ACCOUNT_EMAIL задан", "Добавить SANTAL_GOOGLE_SERVICE_ACCOUNT_EMAIL и выдать этому аккаунту доступ редактора к таблице."),
+    googlePrivateKey: releaseCheck("googlePrivateKey", hasValue(env.GOOGLE_PRIVATE_KEY), "GOOGLE_PRIVATE_KEY задан", "Добавить SANTAL_GOOGLE_PRIVATE_KEY в GitHub secrets.")
   };
+  const allChecks = Object.values(checks);
+  const failedChecks = allChecks.filter((check) => !check.ok);
+  const criticalBlockers = failedChecks.map(({ id, message, fix }) => ({ id, message, fix }));
   return {
     ok: true,
-    ready: Object.values(checks).every((check) => check.ok),
+    ready: failedChecks.length === 0,
+    marketReadinessPercent: Math.round((allChecks.filter((check) => check.ok).length / allChecks.length) * 100),
     generatedAt: new Date().toISOString(),
-    checks
+    checks,
+    criticalBlockers,
+    warnings: [],
+    nextActions: criticalBlockers.map((blocker) => blocker.fix)
   };
 }
 
-function releaseCheck(ok: boolean, message: string) {
-  return { ok, message };
+function releaseCheck(id: string, ok: boolean, message: string, fix: string) {
+  return { id, ok, message, severity: "critical" as const, fix };
 }
 
 function hasValue(value?: string): boolean {
@@ -306,6 +324,10 @@ function isHttpsUrl(value?: string): boolean {
 
 function hasGoogleCredentials(env: WorkerEnv): boolean {
   return Boolean(env.GOOGLE_SHEET_ID && env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_PRIVATE_KEY);
+}
+
+function isStrictProduction(env: WorkerEnv): boolean {
+  return env.APP_ENV === "production" && env.ALLOW_WEB_PREVIEW !== "true";
 }
 
 function serializeState(state: AppState, admin: Admin, sync: StateSync) {
@@ -574,6 +596,7 @@ function takeShiftMessage(reason: string): string {
     {
       not_found: "Смена не найдена",
       inactive_admin: "Профиль не активен для записи на смены",
+      not_allowed_branch: "Эта смена недоступна для ваших филиалов",
       duplicate: "Вы уже записаны на эту смену",
       filled: "Смену уже разобрали",
       overlap: "Смена пересекается с вашим графиком",

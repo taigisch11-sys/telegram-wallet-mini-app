@@ -48,7 +48,7 @@ export async function callTelegramApi<T>(
   method: string,
   payload: Record<string, unknown>
 ): Promise<T | null> {
-  if (!botToken) return null;
+  if (!botToken) throw new Error("Telegram bot token is not configured");
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

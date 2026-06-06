@@ -950,7 +950,9 @@ export function renderAppHtml(): string {
         app.data = await api("/api/bootstrap");
         render();
       } catch (error) {
-        document.getElementById("app").innerHTML = '<div class="empty">Не удалось загрузить приложение. Обновите страницу или откройте Mini App из Telegram.</div>';
+        const message = error.payload?.message || "Не удалось загрузить приложение. Обновите страницу или откройте Mini App из Telegram.";
+        const root = document.getElementById("app");
+        root.innerHTML = '<div class="empty">' + esc(message) + '</div>';
       }
     }
 

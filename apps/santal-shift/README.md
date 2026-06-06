@@ -1,6 +1,8 @@
 # Санталь Смена
 
-Telegram Mini App для подбора смен администраторов медицинской клиники. Приложение публикуется как один Cloudflare Worker: он отдает мобильный интерфейс, API, Telegram webhook и слой синхронизации с Google Sheets.
+Telegram Mini App для подбора смен администраторов и помощников врача в медицинской клинике Санталь.
+
+Приложение публикуется как один Cloudflare Worker: он отдает мобильный интерфейс, API, Telegram webhook, cron-уведомления и слой синхронизации с Google Sheets.
 
 ## Локальный запуск
 
@@ -11,39 +13,111 @@ npm run build --workspace @santal/shift
 npm run dev --workspace @santal/shift
 ```
 
-## Google Sheets
+## Production URL
 
-Таблица задается переменной `GOOGLE_SHEET_ID`. Для записи нужен service account, которому выдан доступ редактора к таблице:
-
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL`
-- `GOOGLE_PRIVATE_KEY`
-- `ADMIN_SETUP_TOKEN`
-
-После деплоя структура листов создается запросом:
-
-```bash
-curl -X POST -H "Authorization: Bearer <ADMIN_SETUP_TOKEN>" https://santal-shift-app.taigisch11.workers.dev/api/admin/setup-sheet
+```text
+https://santal-shift-app.taigisch11.workers.dev/
 ```
 
-Листы: `Настройки_клиники`, `Филиалы`, `Администраторы`, `Смены`, `Заявки`, `Назначения`, `Ставки`, `Праздники`, `Истории_новости`, `Выплаты`, `Начисления`, `Шахматка`, `Справочники`, `Аудит_лог`, `Sync_State`.
+## Google Sheets
 
-`Назначения` хранит связь сотрудника и смены с фактами подтверждения, отметки выхода, завершения и отмены. `Начисления` хранит проверяемые строки выплат по каждой смене, чтобы будущие изменения ставок не ломали историю. `Шахматка` содержит не только агрегат филиала за день, но и строки конкретных смен со слотами времени и назначенными администраторами.
+Рабочая таблица задается переменной `GOOGLE_SHEET_ID`.
+
+Для записи и чтения данных в production нужен Google service account с доступом редактора к таблице.
+
+Обязательные GitHub secrets:
+
+- `SANTAL_GOOGLE_SERVICE_ACCOUNT_EMAIL`
+- `SANTAL_GOOGLE_PRIVATE_KEY`
+
+После добавления секретов нужно вручную запустить GitHub Actions workflow `Deploy Santal Shift Mini App`. При ручном запуске workflow инициализирует структуру таблицы через:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <ADMIN_SETUP_TOKEN>" \
+  https://santal-shift-app.taigisch11.workers.dev/api/admin/setup-sheet
+```
+
+Листы приложения:
+
+- `Настройки_клиники`
+- `Филиалы`
+- `Администраторы`
+- `Смены`
+- `Заявки`
+- `Назначения`
+- `Ставки`
+- `Праздники`
+- `Истории_новости`
+- `Выплаты`
+- `Начисления`
+- `Шахматка`
+- `Справочники`
+- `Аудит_лог`
+- `Уведомления`
+- `Sync_State`
+
+## Telegram
+
+Обязательные GitHub secrets:
+
+- `SANTAL_TELEGRAM_BOT_TOKEN`
+- `SANTAL_TELEGRAM_WEBHOOK_SECRET`
+- `SANTAL_TELEGRAM_TOKEN_ROTATED_AT`
+
+`SANTAL_TELEGRAM_TOKEN_ROTATED_AT` нужен как релизный флаг безопасности. Он подтверждает, что токен бота был перевыпущен перед публичным запуском. Значение указывается в ISO-формате:
+
+```text
+2026-06-06T00:00:00.000Z
+```
+
+Workflow настраивает:
+
+- Bot commands: `/start`, `/my`, `/today`, `/money`, `/help`
+- Menu Button `Смены`
+- Webhook `/api/telegram/webhook`
+- Cron-уведомления каждый день в 09:00 по Томску
 
 ## Проверка релиза
 
-Production-готовность проверяется endpoint:
+Endpoint readiness:
 
 ```bash
 curl https://santal-shift-app.taigisch11.workers.dev/api/release/readiness
 ```
 
-Он возвращает только булевые проверки без значений секретов. Для настоящего релиза должны быть включены Telegram webhook secret, admin setup token, Google Sheet ID, service account email/private key, `APP_ENV=production` и выключенный `ALLOW_WEB_PREVIEW`.
+Он возвращает:
 
-## Telegram
+- `ready`
+- `marketReadinessPercent`
+- `criticalBlockers`
+- `nextActions`
+- безопасные boolean-проверки без значений секретов
 
-Секреты Worker:
+Публичный релиз считается готовым только при:
 
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_WEBHOOK_SECRET`
+```json
+{
+  "ready": true,
+  "marketReadinessPercent": 100
+}
+```
 
-GitHub Actions workflow `deploy-santal-shift.yml` деплоит Worker, записывает секреты, настраивает Menu Button и webhook.
+Manual market release через GitHub Actions блокируется, если readiness меньше 100%.
+
+## Дорожная карта до 100%
+
+Актуальный чек-лист находится в:
+
+```text
+docs/santal-shift-market-release-roadmap.md
+```
+
+## Минимальный smoke test
+
+```bash
+npm run test --workspace @santal/shift
+npm run build --workspace @santal/shift
+curl https://santal-shift-app.taigisch11.workers.dev/health
+curl https://santal-shift-app.taigisch11.workers.dev/api/release/readiness
+```

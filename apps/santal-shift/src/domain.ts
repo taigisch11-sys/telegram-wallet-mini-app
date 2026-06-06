@@ -110,7 +110,7 @@ export type AppState = {
 
 export type TakeShiftResult =
   | { ok: true; state: AppState; assignment: Assignment }
-  | { ok: false; state: AppState; reason: "not_found" | "inactive_admin" | "duplicate" | "filled" | "overlap" | "closed" };
+  | { ok: false; state: AppState; reason: "not_found" | "inactive_admin" | "not_allowed_branch" | "duplicate" | "filled" | "overlap" | "closed" };
 
 export function calculateShiftPay(input: {
   hourlyRate: number;
@@ -446,6 +446,7 @@ export function takeShift(state: AppState, input: { shiftId: string; adminId: st
 
   if (!shift) return { ok: false, state, reason: "not_found" };
   if (!admin || admin.status !== "active" || !admin.canTakeShifts) return { ok: false, state, reason: "inactive_admin" };
+  if (!admin.branchIds.includes(shift.branchId)) return { ok: false, state, reason: "not_allowed_branch" };
   if (state.assignments.some((item) => item.shiftId === input.shiftId && item.adminId === input.adminId && item.status !== "cancelled")) {
     return { ok: false, state, reason: "duplicate" };
   }

@@ -92,6 +92,18 @@ describe("Santal Shift domain", () => {
     expect(result.reason).toBe("overlap");
   });
 
+  it("rejects shifts outside the administrator allowed branches", () => {
+    const state = createDemoState("2026-05-20");
+    const result = takeShift(state, {
+      shiftId: "shift_20260522_csm10_admin_full",
+      adminId: "admin_nikita",
+      nowIso: "2026-05-20T03:00:00.000Z"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("not_allowed_branch");
+  });
+
   it("builds a branch-day schedule board for Google Sheets chessboard view", () => {
     const board = buildScheduleBoard(createDemoState("2026-05-20"));
     const today = board.find((day) => day.date === "2026-05-20");
