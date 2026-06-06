@@ -7,3 +7,6 @@ APP_ENV = "production"
 GOOGLE_SHEET_ID = "1U4KsvYkrp5DzU4hCpmoOSZ_245lnI23qyg8ha-v9MMY"
 SANTAL_WEBAPP_URL = "https://santal-shift-app.taigisch11.workers.dev/"
 ALLOW_WEB_PREVIEW = "false"
+
+[triggers]
+crons = ["0 2 * * *"]

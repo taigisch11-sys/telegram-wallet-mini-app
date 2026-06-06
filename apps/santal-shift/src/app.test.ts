@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app";
 import type { WorkerEnv } from "./env";
 
@@ -11,6 +11,10 @@ const env: WorkerEnv = {
   ADMIN_SETUP_TOKEN: "setup-secret",
   ALLOW_WEB_PREVIEW: "true"
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("Santal Shift worker API", () => {
   it("returns health status", async () => {
@@ -126,6 +130,66 @@ describe("Santal Shift worker API", () => {
     expect(payload.checks.googleServiceAccountEmail.ok).toBe(false);
     expect(payload.checks.googlePrivateKey.ok).toBe(false);
     expect(JSON.stringify(payload)).not.toContain("test-secret");
+  });
+
+  it("answers Telegram bot commands and ignores duplicate update ids", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = createApp();
+    const update = {
+      update_id: 9001,
+      message: { chat: { id: 7001 }, text: "/start" }
+    };
+
+    const first = await app.request(
+      "/api/telegram/webhook",
+      { method: "POST", headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "test-secret" }, body: JSON.stringify(update) },
+      env
+    );
+    const second = await app.request(
+      "/api/telegram/webhook",
+      { method: "POST", headers: { "Content-Type": "application/json", "X-Telegram-Bot-Api-Secret-Token": "test-secret" }, body: JSON.stringify(update) },
+      env
+    );
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    await expect(second.json()).resolves.toMatchObject({ duplicate: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.chat_id).toBe(7001);
+    expect(body.text).toContain("не зарегистрированы");
+    expect(body.reply_markup.inline_keyboard[0][0].web_app.url).toBe(env.SANTAL_WEBAPP_URL);
+  });
+
+  it("sends a Telegram confirmation after taking a shift from Mini App", async () => {
+    const fetchMock = vi.fn(async () => Response.json({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const app = createApp();
+    const initData = await signedTelegramInitData({ id: 42, first_name: "Анна" }, env.TELEGRAM_BOT_TOKEN);
+
+    const response = await app.request(
+      "/api/shifts/take",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftId: "shift_20260522_csm10_admin_full", initData })
+      },
+      {
+        ...env,
+        APP_ENV: "production",
+        ALLOW_WEB_PREVIEW: "false",
+        GOOGLE_SERVICE_ACCOUNT_EMAIL: "",
+        GOOGLE_PRIVATE_KEY: ""
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    expect(body.chat_id).toBe(42);
+    expect(body.text).toContain("Смена добавлена");
+    expect(body.text).toContain("Оплата");
   });
 });
 

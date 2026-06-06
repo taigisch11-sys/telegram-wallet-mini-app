@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import {
   cancelAssignment,
   buildScheduleBoard,
+  calculateShiftPay,
   checkInAssignment,
   completeAssignment,
   confirmAssignment,
@@ -10,8 +11,11 @@ import {
   myAssignments,
   takeShift,
   visibleShiftsForAdmin,
+  type Assignment,
   type Admin,
-  type AppState
+  type AppState,
+  type Branch,
+  type Shift
 } from "./domain";
 import type { WorkerEnv } from "./env";
 import { appendAccrual, appendAssignment, appendAudit, loadState, setupSpreadsheet } from "./sheets";
@@ -19,6 +23,7 @@ import { callTelegramApi, verifyTelegramInitData } from "./telegram";
 import { renderAppHtml } from "./ui";
 
 type AppBindings = { Bindings: WorkerEnv };
+type StateSync = Awaited<ReturnType<typeof loadState>>["sync"];
 
 let memoryState: AppState = createDemoState("2026-05-20");
 const processedUpdates = new Set<number>();
@@ -80,6 +85,9 @@ export function createApp() {
       "success",
       ""
     ]);
+    if (shift) {
+      await sendAssignmentMessage(c.env, identity.telegramUser?.id ?? admin.telegramUserId, admin, shift, result.assignment, "Смена добавлена");
+    }
 
     return c.json({ ok: true, assignment: result.assignment, state: serializeState(memoryState, admin, loaded.sync) });
   });
@@ -127,6 +135,7 @@ export function createApp() {
         "success",
         ""
       ]);
+      await sendAssignmentMessage(c.env, identity.telegramUser?.id ?? admin.telegramUserId, admin, shift, assignment, assignmentActionTitle(action));
     }
 
     return c.json({ ok: true, state: serializeState(memoryState, admin, loaded.sync) });
@@ -178,21 +187,12 @@ export function createApp() {
     }
 
     const chatId = update.message?.chat?.id;
-    if (chatId && update.message?.text?.startsWith("/start")) {
-      await callTelegramApi(c.env.TELEGRAM_BOT_TOKEN, "sendMessage", {
-        chat_id: chatId,
-        text: "Откройте «Санталь Смена», чтобы подобрать смену, подтвердить выход и увидеть начисления.",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: "Открыть смены",
-                web_app: { url: c.env.SANTAL_WEBAPP_URL || new URL(c.req.url).origin }
-              }
-            ]
-          ]
-        }
-      });
+    const text = update.message?.text?.trim() || "";
+    if (chatId && text.startsWith("/")) {
+      const loaded = await currentState(c.env);
+      memoryState = loaded.state;
+      const admin = findAdminByTelegramChat(memoryState, chatId);
+      await sendTelegramCommandReply(c.env, chatId, new URL(c.req.url).origin, memoryState, admin, text);
     }
     return c.json({ ok: true });
   });
@@ -200,7 +200,22 @@ export function createApp() {
   return app;
 }
 
-async function currentState(env: WorkerEnv): Promise<{ state: AppState; sync: Awaited<ReturnType<typeof loadState>>["sync"] }> {
+export async function handleScheduled(_: ScheduledController, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
+  ctx.waitUntil(sendDailyTelegramDigest(env));
+}
+
+async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
+  const loaded = await currentState(env);
+  memoryState = loaded.state;
+  for (const admin of memoryState.admins.filter((item) => item.status === "active" && item.canTakeShifts)) {
+    const chatId = telegramChatId(admin.telegramUserId);
+    if (!chatId) continue;
+    const assistant = buildAssistantSummary(memoryState, admin);
+    await sendTelegramMessage(env, chatId, assistant.headline + "\n\n" + assistant.body, assistant.primaryAction);
+  }
+}
+
+async function currentState(env: WorkerEnv): Promise<{ state: AppState; sync: StateSync }> {
   const loaded = await loadState(env);
   if (loaded.sync.connected) return loaded;
   return { state: memoryState, sync: loaded.sync };
@@ -214,6 +229,10 @@ async function resolveIdentity(env: WorkerEnv, initData?: string, demoAdminId?: 
 
 function findAdminOrDefault(state: AppState, adminId?: string): Admin {
   return state.admins.find((admin) => admin.id === adminId) ?? state.admins[0];
+}
+
+function findAdminByTelegramChat(state: AppState, chatId: number): Admin | undefined {
+  return state.admins.find((admin) => admin.telegramUserId === String(chatId));
 }
 
 function findAuthorizedAdmin(
@@ -277,7 +296,7 @@ function hasGoogleCredentials(env: WorkerEnv): boolean {
   return Boolean(env.GOOGLE_SHEET_ID && env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_PRIVATE_KEY);
 }
 
-function serializeState(state: AppState, admin: Admin, sync: Awaited<ReturnType<typeof loadState>>["sync"]) {
+function serializeState(state: AppState, admin: Admin, sync: StateSync) {
   return {
     settings: state.settings,
     sync,
@@ -287,8 +306,253 @@ function serializeState(state: AppState, admin: Admin, sync: Awaited<ReturnType<
     myShifts: myAssignments(state, admin.id),
     stories: state.stories.filter((story) => story.status === "published").sort((left, right) => left.priority - right.priority),
     money: deriveMoneySummary(state, admin.id),
-    scheduleBoard: buildScheduleBoard(state)
+    scheduleBoard: buildScheduleBoard(state),
+    assistant: buildAssistantSummary(state, admin)
   };
+}
+
+function buildAssistantSummary(state: AppState, admin: Admin) {
+  const todayDate = operationalToday(state);
+  const tomorrowDate = addDaysIso(todayDate, 1);
+  const assignments = myAssignments(state, admin.id).filter(({ assignment }) => assignment.status !== "cancelled");
+  const activeAssignments = assignments.filter(({ assignment }) => assignment.status !== "completed");
+  const nextAssignment = activeAssignments.find(({ shift }) => shift.date >= todayDate) ?? activeAssignments[0];
+  const tomorrowAssignment = activeAssignments.find(({ shift }) => shift.date === tomorrowDate);
+  const urgentShift = visibleShiftsForAdmin(state, admin.id).find((shift) => shift.urgent && shift.status !== "filled");
+  const money = deriveMoneySummary(state, admin.id);
+
+  if (tomorrowAssignment) {
+    const branch = findBranch(state, tomorrowAssignment.shift.branchId);
+    return {
+      todayDate,
+      tomorrowDate,
+      status: "tomorrow_shift",
+      unreadCount: 1,
+      nextShiftId: tomorrowAssignment.shift.id,
+      nextAssignmentId: tomorrowAssignment.assignment.id,
+      urgentShiftId: urgentShift?.id,
+      headline: "Завтра у вас смена",
+      body: `${tomorrowAssignment.shift.startTime}—${tomorrowAssignment.shift.endTime}, ${branch?.name ?? "филиал"}. Подтвердите выход заранее, чтобы координатор видел готовность.`,
+      primaryView: "mine",
+      primaryAction: "Открыть мои смены"
+    };
+  }
+
+  if (!nextAssignment) {
+    return {
+      todayDate,
+      tomorrowDate,
+      status: "no_shifts",
+      unreadCount: urgentShift ? 2 : 1,
+      nextShiftId: undefined,
+      nextAssignmentId: undefined,
+      urgentShiftId: urgentShift?.id,
+      headline: "Вы пока не записаны ни на одну смену",
+      body: urgentShift
+        ? "Есть срочная подходящая смена. Откройте поиск, чтобы забрать ее до закрытия."
+        : "Откройте поиск и выберите удобный филиал. Бот напомнит о завтрашней смене после записи.",
+      primaryView: "search",
+      primaryAction: "Найти смену"
+    };
+  }
+
+  const branch = findBranch(state, nextAssignment.shift.branchId);
+  return {
+    todayDate,
+    tomorrowDate,
+    status: "next_shift",
+    unreadCount: nextAssignment.assignment.status === "assigned" ? 1 : 0,
+    nextShiftId: nextAssignment.shift.id,
+    nextAssignmentId: nextAssignment.assignment.id,
+    urgentShiftId: urgentShift?.id,
+    headline: nextAssignment.assignment.status === "assigned" ? "Смену нужно подтвердить" : "Следующая смена в графике",
+    body: `${dateLabel(nextAssignment.shift.date)} ${nextAssignment.shift.startTime}—${nextAssignment.shift.endTime}, ${branch?.name ?? "филиал"}. Ожидаемый доход: ${formatRub(calculateShiftPay(nextAssignment.shift))}.`,
+    primaryView: "mine",
+    primaryAction: nextAssignment.assignment.status === "assigned" ? "Подтвердить" : "Открыть мои смены",
+    moneyExpected: money.expected
+  };
+}
+
+async function sendTelegramCommandReply(
+  env: WorkerEnv,
+  chatId: number,
+  origin: string,
+  state: AppState,
+  admin: Admin | undefined,
+  rawText: string
+): Promise<void> {
+  const command = rawText.split(/\s+/)[0].split("@")[0].toLowerCase();
+  const webAppUrl = env.SANTAL_WEBAPP_URL || origin;
+  if (command === "/help") {
+    await sendTelegramMessage(
+      env,
+      chatId,
+      "Я операционный ассистент «Санталь Смена».\n\nКоманды:\n/my — мои смены\n/today — что актуально сегодня\n/money — начисления\n/help — помощь",
+      "Открыть приложение",
+      webAppUrl
+    );
+    return;
+  }
+
+  if (!admin) {
+    await sendTelegramMessage(
+      env,
+      chatId,
+      "Вы еще не зарегистрированы в списке сотрудников.\n\nОткройте Mini App. Если доступ не появился, попросите координатора добавить ваш Telegram ID в лист «Администраторы».",
+      "Открыть смены",
+      webAppUrl
+    );
+    return;
+  }
+
+  if (command === "/start") {
+    const assistant = buildAssistantSummary(state, admin);
+    await sendTelegramMessage(env, chatId, "Санталь Смена на связи.\n\n" + assistant.headline + "\n" + assistant.body, assistant.primaryAction, webAppUrl);
+    return;
+  }
+
+  if (command === "/my") {
+    await sendTelegramMessage(env, chatId, buildMyShiftsMessage(state, admin), "Открыть мои смены", webAppUrl);
+    return;
+  }
+
+  if (command === "/today") {
+    const assistant = buildAssistantSummary(state, admin);
+    await sendTelegramMessage(env, chatId, assistant.headline + "\n\n" + assistant.body, assistant.primaryAction, webAppUrl);
+    return;
+  }
+
+  if (command === "/money") {
+    const money = deriveMoneySummary(state, admin.id);
+    await sendTelegramMessage(
+      env,
+      chatId,
+      `Деньги\n\nОжидается: ${formatRub(money.expected)}\nВ работе: ${formatRub(money.pending)}\nНачислено: ${formatRub(money.earned)}\nОдобрено к выплате: ${formatRub(money.approved)}`,
+      "Открыть выплаты",
+      webAppUrl
+    );
+    return;
+  }
+
+  await sendTelegramMessage(env, chatId, "Команда не распознана. Напишите /help, чтобы увидеть список команд.", "Открыть приложение", webAppUrl);
+}
+
+function buildMyShiftsMessage(state: AppState, admin: Admin): string {
+  const items = myAssignments(state, admin.id).filter(({ assignment }) => assignment.status !== "cancelled");
+  if (!items.length) return "Вы пока не зарегистрированы ни на одну смену.\n\nОткройте поиск: там видны подходящие филиалы и свободные места.";
+  return (
+    "Мои смены\n\n" +
+    items
+      .slice(0, 5)
+      .map(({ assignment, shift }) => {
+        const branch = findBranch(state, shift.branchId);
+        return `${dateLabel(shift.date)} ${shift.startTime}—${shift.endTime}, ${branch?.name ?? "филиал"}\n${shift.title}, ${statusText(assignment.status)}, ${formatRub(calculateShiftPay(shift))}`;
+      })
+      .join("\n\n")
+  );
+}
+
+async function sendAssignmentMessage(
+  env: WorkerEnv,
+  telegramUserId: string | undefined,
+  admin: Admin,
+  shift: Shift,
+  assignment: Assignment,
+  title: string
+): Promise<void> {
+  const chatId = telegramChatId(telegramUserId);
+  if (!chatId) return;
+  const branchName = shiftBranchName(memoryState, shift);
+  await sendTelegramMessage(
+    env,
+    chatId,
+    `${title}\n\n${shift.title}\n${dateLabel(shift.date)} ${shift.startTime}—${shift.endTime}, ${branchName}\nСтатус: ${statusText(assignment.status)}\nОплата: ${formatRub(calculateShiftPay(shift))}\n\n${admin.fullName}, если планы изменятся, отмените смену заранее.`,
+    "Открыть смену"
+  );
+}
+
+async function sendTelegramMessage(
+  env: WorkerEnv,
+  chatId: number,
+  text: string,
+  buttonText = "Открыть смены",
+  webAppUrl = env.SANTAL_WEBAPP_URL
+): Promise<void> {
+  try {
+    await callTelegramApi(env.TELEGRAM_BOT_TOKEN, "sendMessage", {
+      chat_id: chatId,
+      text,
+      reply_markup: {
+        inline_keyboard: [[{ text: buttonText, web_app: { url: webAppUrl || "https://santal-shift-app.taigisch11.workers.dev/" } }]]
+      }
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function telegramChatId(value?: string): number | undefined {
+  if (!value || !/^\d+$/.test(value)) return undefined;
+  return Number(value);
+}
+
+function assignmentActionTitle(action: string): string {
+  return (
+    {
+      confirm: "Смена подтверждена",
+      "check-in": "Отметка на месте принята",
+      complete: "Смена завершена",
+      cancel: "Смена отменена"
+    }[action] || "Статус смены обновлен"
+  );
+}
+
+function findBranch(state: AppState, branchId: string): Branch | undefined {
+  return state.branches.find((branch) => branch.id === branchId);
+}
+
+function shiftBranchName(state: AppState, shift: Shift): string {
+  return findBranch(state, shift.branchId)?.name ?? "филиал";
+}
+
+function statusText(status: string): string {
+  return (
+    {
+      assigned: "назначена",
+      confirmed: "подтверждена",
+      checked_in: "на месте",
+      completed: "завершена",
+      cancelled: "отменена"
+    }[status] || status
+  );
+}
+
+function operationalToday(state: AppState): string {
+  const realToday = zonedIsoDate(new Date(), state.settings.timezone);
+  const dates = [...new Set(state.shifts.map((shift) => shift.date))].sort();
+  return dates.some((date) => date >= realToday) ? realToday : dates[0] ?? realToday;
+}
+
+function zonedIsoDate(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysIso(date: string, days: number): string {
+  const next = new Date(`${date}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+
+function dateLabel(date: string): string {
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(new Date(`${date}T00:00:00.000Z`));
+}
+
+function formatRub(value: number): string {
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value)} ₽`;
 }
 
 function takeShiftMessage(reason: string): string {

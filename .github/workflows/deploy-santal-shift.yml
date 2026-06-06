@@ -106,7 +106,11 @@ jobs:
 
           await call("setMyCommands", {
             commands: [
-              { command: "start", description: "Открыть приложение" }
+              { command: "start", description: "Открыть приложение" },
+              { command: "my", description: "Мои смены" },
+              { command: "today", description: "Что актуально сегодня" },
+              { command: "money", description: "Начисления и выплаты" },
+              { command: "help", description: "Помощь по боту" }
             ]
           });
           await call("setChatMenuButton", {

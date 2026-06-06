@@ -671,6 +671,14 @@ export function renderAppHtml(): string {
       color: var(--muted);
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.74);
     }
+    .empty .assistant-title {
+      font-size: 22px;
+      line-height: 1.08;
+    }
+    .empty .assistant-body {
+      font-size: 14px;
+      line-height: 1.38;
+    }
     .bottom-nav {
       width: min(94vw, 498px);
       padding: 7px;
@@ -736,6 +744,154 @@ export function renderAppHtml(): string {
       .time { font-size: 22px; }
       .bottom-nav { width: min(96vw, 498px); }
     }
+    .assistant-card {
+      margin: 14px 0 18px;
+      padding: 18px;
+      border-radius: 24px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(17, 20, 23, 0.03), 0 14px 34px rgba(17, 20, 23, 0.055);
+    }
+    .assistant-kicker, .fact-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .assistant-title {
+      margin-top: 8px;
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 25px;
+      line-height: 1.05;
+      font-weight: 700;
+      letter-spacing: -0.045em;
+    }
+    .assistant-body {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.42;
+    }
+    .assistant-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+    .assistant-actions .cta {
+      flex: 1;
+      min-width: 132px;
+    }
+    .tomorrow-card {
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, #ffffff, #fafbfb);
+      border: 1px solid var(--line);
+    }
+    .fact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 9px;
+      margin-top: 13px;
+    }
+    .fact {
+      padding: 11px 12px;
+      border-radius: 16px;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+    }
+    .fact strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.2;
+    }
+    .timeline {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .timeline-step {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 9px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .timeline-dot {
+      width: 10px;
+      height: 10px;
+      margin-top: 3px;
+      border-radius: 999px;
+      border: 2px solid var(--line);
+      background: #ffffff;
+    }
+    .timeline-step.done .timeline-dot {
+      border-color: var(--primary);
+      background: var(--primary);
+    }
+    .message-row {
+      display: grid;
+      grid-template-columns: 12px 1fr auto;
+      gap: 12px;
+      align-items: start;
+      width: 100%;
+      text-align: left;
+    }
+    .unread-dot {
+      width: 8px;
+      height: 8px;
+      margin-top: 9px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(163, 31, 52, 0.08);
+    }
+    .message-time {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .nav-badge {
+      position: absolute;
+      top: 7px;
+      right: 16px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .nav-btn {
+      position: relative;
+    }
+    .guidance-block {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 18px;
+      background: #fff9ed;
+      border: 1px solid #f1dfbd;
+      color: #6d4a12;
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 600;
+    }
+    @media (max-width: 380px) {
+      .fact-grid { grid-template-columns: 1fr; }
+      .assistant-actions .cta { min-width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -769,6 +925,12 @@ export function renderAppHtml(): string {
     const dateTitle = (date) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", weekday: "long" }).format(new Date(date + "T00:00:00"));
     const branchById = (id) => app.data?.state.branches.find((branch) => branch.id === id);
     const shiftPay = (shift) => Math.round(shift.hourlyRate * shift.plannedHours * shift.holidayMultiplier + shift.bonusAmount);
+    const assistant = () => app.data?.state.assistant || { headline: "Санталь Смена", body: "Подберите удобную смену и подтвердите выход.", primaryView: "search", primaryAction: "Найти смену", unreadCount: 0 };
+    const myActiveShifts = () => app.data.state.myShifts.filter(({ assignment }) => assignment.status !== "completed" && assignment.status !== "cancelled");
+    const tomorrowShift = () => {
+      const info = assistant();
+      return app.data.state.visibleShifts.find((shift) => shift.id === info.urgentShiftId || shift.date === info.tomorrowDate) || app.data.state.visibleShifts[0];
+    };
 
     async function api(path, options = {}) {
       const headers = {
@@ -800,17 +962,21 @@ export function renderAppHtml(): string {
 
     function header() {
       const money = app.data.state.money;
+      const info = assistant();
       return '<div class="topbar">' +
         '<div class="brand"><div class="brand-mark">S</div><div><h1>Санталь Смена</h1><p>' + esc(app.data.state.admin.fullName) + '</p></div></div>' +
         '<div class="sync-pill" data-connected="' + app.data.state.sync.connected + '"><span class="sync-dot"></span>' + (app.data.state.sync.connected ? "Sheets" : "Демо") + '</div>' +
       '</div>' +
       '<section class="hero-card">' +
-        '<div class="hero-label">Ожидаемый доход</div>' +
-        '<div class="hero-money">' + fmtMoney(money.expected) + '</div>' +
+        '<div class="hero-label">Операционный ассистент</div>' +
+        '<div class="assistant-title">' + esc(info.headline) + '</div>' +
+        '<div class="assistant-body">' + esc(info.body) + '</div>' +
         '<div class="hero-row">' +
+          '<div class="metric"><span>Смен в графике</span><strong>' + myActiveShifts().length + '</strong></div>' +
           '<div class="metric"><span>В работе</span><strong>' + fmtMoney(money.pending) + '</strong></div>' +
           '<div class="metric"><span>Начислено</span><strong>' + fmtMoney(money.earned) + '</strong></div>' +
         '</div>' +
+        '<div class="assistant-actions"><button class="cta" onclick="setView(\\'' + escAttr(info.primaryView || "search") + '\\')">' + esc(info.primaryAction || "Открыть") + '</button><button class="cta secondary" onclick="setView(\\'chat\\')">Уведомления</button></div>' +
       '</section>';
     }
 
@@ -833,9 +999,10 @@ export function renderAppHtml(): string {
           '<button class="filter-chip ' + (app.selectedBranch === "all" ? "active" : "") + '" onclick="setBranch(\\'all\\')">Все филиалы</button>' +
           branches.map((branch) => '<button class="filter-chip ' + (app.selectedBranch === branch.id ? "active" : "") + '" onclick="setBranch(\\'' + escAttr(branch.id) + '\\')">' + esc(branch.name) + '</button>').join("") +
         '</div>' +
-        storiesHtml() +
+        recommendationHtml() +
+        storiesHtml("search") +
         '<div class="section-title"><h2>' + (app.selectedDate === "all" ? "Ближайшие смены" : dateTitle(app.selectedDate)) + '</h2><span>' + shifts.length + '</span></div>' +
-        (shifts.length ? shifts.map(shiftCard).join("") : '<div class="empty">На выбранный период смен нет. Можно сменить филиал или дату.</div>');
+        (shifts.length ? shifts.map(shiftCard).join("") : emptySearchHtml());
     }
 
     function dateStrip(dates) {
@@ -844,10 +1011,22 @@ export function renderAppHtml(): string {
       '</div>';
     }
 
-    function storiesHtml() {
+    function storiesHtml(context = "search") {
+      const prefix = context === "chat" ? "Инструкция" : "Подсказка";
       return '<div class="stories">' + app.data.state.stories.map((story, index) =>
-        '<button class="story" onclick="openStory(\\'' + escAttr(story.id) + '\\')"><div class="story-icon">' + (index + 1) + '</div><strong>' + esc(story.title) + '</strong></button>'
+        '<button class="story" onclick="openStory(\\'' + escAttr(story.id) + '\\')"><div class="story-icon">' + (index + 1) + '</div><span class="fact-label">' + prefix + '</span><strong>' + esc(story.title) + '</strong></button>'
       ).join("") + '</div>';
+    }
+
+    function recommendationHtml() {
+      const shift = tomorrowShift();
+      if (!shift) return '<div class="assistant-card"><div class="assistant-kicker">Рекомендация</div><div class="assistant-title">Свободных смен пока нет</div><div class="assistant-body">Бот напишет, когда появится подходящая смена по вашим филиалам.</div></div>';
+      const branch = branchById(shift.branchId);
+      return '<div class="tomorrow-card"><div class="assistant-kicker">' + (shift.urgent ? "Срочная смена" : "Ближайшая возможность") + '</div><div class="shift-head"><div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + dateTitle(shift.date) + ' · ' + esc(branch.name) + '</div></div><div class="pay">' + fmtMoney(shiftPay(shift)) + '</div></div><div class="fact-grid"><div class="fact"><span class="fact-label">Время</span><strong>' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</strong></div><div class="fact"><span class="fact-label">Места</span><strong>' + (shift.requiredCount - shift.assignedCount) + ' свободно</strong></div><div class="fact"><span class="fact-label">Филиал</span><strong>' + esc(branch.name) + '</strong></div></div><div class="assistant-actions"><button class="cta" onclick="openShift(\\'' + escAttr(shift.id) + '\\')">Посмотреть</button><button class="cta secondary" onclick="setView(\\'chat\\')">Напомнить в чат</button></div></div>';
+    }
+
+    function emptySearchHtml() {
+      return '<div class="empty"><div class="assistant-title">На выбранный период смен нет</div><div class="assistant-body">Сбросьте фильтры или откройте общение: там будут уведомления о новых сменах и срочных заменах.</div><div class="assistant-actions"><button class="cta" onclick="setDate(\\'all\\'); setBranch(\\'all\\')">Показать все</button><button class="cta secondary" onclick="setView(\\'chat\\')">Уведомления</button></div></div>';
     }
 
     function shiftCard(shift) {
@@ -857,7 +1036,9 @@ export function renderAppHtml(): string {
       return '<article class="shift-card ' + (shift.urgent ? "urgent" : "") + '" onclick="openShift(\\'' + escAttr(shift.id) + '\\')">' +
         '<div class="shift-head"><div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + esc(branch.name) + ' · ' + esc(branch.address) + '</div>' + (shift.urgent ? '<span class="badge urgent">Срочно</span>' : '<span class="badge">Подходит вам</span>') + '</div><div class="pay">' + fmtMoney(shiftPay(shift)) + '</div></div>' +
         '<div class="divider"></div>' +
-        '<div class="shift-foot"><div><div class="time">' + shift.startTime + '—' + shift.endTime + '</div><div class="caption">' + shift.plannedHours + ' ч · ' + fmtMoney(shift.hourlyRate) + '/час · мест ' + shift.assignedCount + '/' + shift.requiredCount + '</div></div>' +
+        '<div class="fact-grid"><div class="fact"><span class="fact-label">Время</span><strong>' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</strong></div><div class="fact"><span class="fact-label">Ставка</span><strong>' + fmtMoney(shift.hourlyRate) + '/ч</strong></div><div class="fact"><span class="fact-label">Места</span><strong>' + shift.assignedCount + '/' + shift.requiredCount + '</strong></div></div>' +
+        '<div class="divider"></div>' +
+        '<div class="shift-foot"><div><div class="time">' + shift.plannedHours + ' ч</div><div class="caption">Координатор: ' + esc(shift.coordinator) + '</div></div>' +
         '<button class="cta ' + (isFull || alreadyMine ? "secondary" : "") + '" onclick="event.stopPropagation(); ' + (alreadyMine ? "setView(\\'mine\\')" : "take(\\'" + escAttr(shift.id) + "\\')") + '" ' + (isFull && !alreadyMine ? "disabled" : "") + '>' + (alreadyMine ? "В моих" : isFull ? "Заполнено" : "Взять") + '</button></div>' +
       '</article>';
     }
@@ -868,8 +1049,8 @@ export function renderAppHtml(): string {
         (items.length ? items.map(({ assignment, shift }) => {
           const branch = branchById(shift.branchId);
           const nextAction = assignment.status === "assigned" ? ["confirm", "Подтвердить"] : assignment.status === "confirmed" ? ["check-in", "Я на месте"] : assignment.status === "checked_in" ? ["complete", "Завершить"] : null;
-          return '<article class="list-card"><div class="shift-head"><div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + esc(branch.name) + ' · ' + dateTitle(shift.date) + '</div><span class="badge">' + statusLabel(assignment.status) + '</span></div><div class="pay">' + fmtMoney(shiftPay(shift)) + '</div></div><div class="divider"></div><div class="shift-foot"><div><div class="time">' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</div><div class="caption">Координатор: ' + esc(shift.coordinator) + '</div></div><div>' + (nextAction ? '<button class="cta" onclick="assignmentAction(\\'' + escAttr(assignment.id) + '\\',\\'' + nextAction[0] + '\\')">' + nextAction[1] + '</button>' : '') + '<button class="cta danger" onclick="assignmentAction(\\'' + escAttr(assignment.id) + '\\',\\'cancel\\')">Отменить</button></div></div></article>';
-        }).join("") : '<div class="empty">Вы пока не взяли смены. Подходящие варианты находятся во вкладке «Поиск».</div>');
+          return '<article class="list-card"><div class="shift-head"><div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + esc(branch.name) + ' · ' + dateTitle(shift.date) + '</div><span class="badge">' + statusLabel(assignment.status) + '</span></div><div class="pay">' + fmtMoney(shiftPay(shift)) + '</div></div><div class="timeline">' + timelineHtml(assignment.status) + '</div><div class="divider"></div><div class="shift-foot"><div><div class="time">' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</div><div class="caption">Координатор: ' + esc(shift.coordinator) + '</div></div><div>' + (nextAction ? '<button class="cta" onclick="assignmentAction(\\'' + escAttr(assignment.id) + '\\',\\'' + nextAction[0] + '\\')">' + nextAction[1] + '</button>' : '') + '<button class="cta danger" onclick="assignmentAction(\\'' + escAttr(assignment.id) + '\\',\\'cancel\\')">Отменить</button></div></div></article>';
+        }).join("") : '<div class="empty"><div class="assistant-title">Вы пока не зарегистрированы ни на одну смену</div><div class="assistant-body">Это сообщение теперь продублирует и Telegram-бот. Выберите смену в поиске или дождитесь уведомления о подходящей замене.</div><div class="assistant-actions"><button class="cta" onclick="setView(\\'search\\')">Найти смену</button><button class="cta secondary" onclick="setView(\\'chat\\')">Открыть чат</button></div></div>');
     }
 
     function moneyView() {
@@ -881,10 +1062,12 @@ export function renderAppHtml(): string {
     }
 
     function chatView() {
-      return '<div class="section-title"><h2>Общение</h2><span>центр</span></div>' + storiesHtml() +
-        '<button class="list-card"><div class="shift-title">Поддержка</div><div class="shift-sub">Быстрые вопросы по смене, выплатам и отменам</div></button>' +
-        '<button class="list-card"><div class="shift-title">Чаты с филиалами</div><div class="shift-sub">Контакты координаторов подтягиваются из таблицы</div></button>' +
-        '<button class="list-card"><div class="shift-title">Правила и обучение</div><div class="shift-sub">Как отметиться, что делать при опоздании, как получить выплату</div></button>';
+      const info = assistant();
+      return '<div class="section-title"><h2>Общение</h2><span>инбокс</span></div>' +
+        '<div class="assistant-card"><div class="assistant-kicker">Telegram ассистент</div><div class="assistant-title">Уведомления выйдут в чат</div><div class="assistant-body">Бот отвечает на /my, /today, /money и утром напоминает о завтрашней смене. Если смен нет, он мягко вернет вас в поиск.</div><div class="assistant-actions"><button class="cta" onclick="openTelegramHelp()">Команды бота</button><button class="cta secondary" onclick="setView(\\'search\\')">Найти смену</button></div></div>' +
+        '<button class="list-card" onclick="setView(\\'' + escAttr(info.primaryView || "search") + '\\')"><div class="message-row"><span class="unread-dot"></span><div><div class="shift-title">' + esc(info.headline) + '</div><div class="shift-sub">' + esc(info.body) + '</div></div><span class="message-time">сейчас</span></div></button>' +
+        inboxRowsHtml() +
+        storiesHtml("chat");
     }
 
     function profileView() {
@@ -898,7 +1081,7 @@ export function renderAppHtml(): string {
 
     function renderNav() {
       document.getElementById("nav").innerHTML = tabs.map(([id, label, icon]) =>
-        '<button class="nav-btn ' + (app.view === id ? "active" : "") + '" onclick="setView(\\'' + id + '\\')">' + icon + '<span>' + label + '</span></button>'
+        '<button class="nav-btn ' + (app.view === id ? "active" : "") + '" onclick="setView(\\'' + id + '\\')">' + navBadge(id) + icon + '<span>' + label + '</span></button>'
       ).join("");
     }
 
@@ -913,13 +1096,52 @@ export function renderAppHtml(): string {
         : isFull
           ? '<button class="cta secondary" style="width:100%; margin-top:14px" disabled>Мест нет</button>'
           : '<button class="cta" style="width:100%; margin-top:14px" onclick="take(\\'' + escAttr(shift.id) + '\\')">Взять смену</button>';
-      openModal('<div class="grabber"></div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + esc(branch.name) + ' · ' + esc(branch.address) + '</div><div class="detail-grid"><div class="detail-cell"><span>Дата</span><strong>' + dateTitle(shift.date) + '</strong></div><div class="detail-cell"><span>Время</span><strong>' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</strong></div><div class="detail-cell"><span>Оплата</span><strong>' + fmtMoney(shiftPay(shift)) + '</strong></div><div class="detail-cell"><span>Места</span><strong>' + shift.assignedCount + '/' + shift.requiredCount + '</strong></div></div><p class="shift-sub">' + esc(shift.notes) + '</p><p class="shift-sub">Координатор: ' + esc(shift.coordinator) + '</p>' + action + '<button class="cta secondary" style="width:100%; margin-top:10px" onclick="closeModal()">Закрыть</button>');
+      openModal('<div class="grabber"></div><div class="shift-title">' + esc(shift.title) + '</div><div class="shift-sub">' + esc(branch.name) + ' · ' + esc(branch.address) + '</div><div class="detail-grid"><div class="detail-cell"><span>Дата</span><strong>' + dateTitle(shift.date) + '</strong></div><div class="detail-cell"><span>Время</span><strong>' + esc(shift.startTime) + '—' + esc(shift.endTime) + '</strong></div><div class="detail-cell"><span>Оплата</span><strong>' + fmtMoney(shiftPay(shift)) + '</strong></div><div class="detail-cell"><span>Места</span><strong>' + shift.assignedCount + '/' + shift.requiredCount + '</strong></div></div><p class="shift-sub">' + esc(shift.notes) + '</p><div class="guidance-block">После записи бот пришлет чек смены в Telegram. За день до выхода он напомнит о смене, а в день работы — поможет пройти этапы подтверждения.</div><p class="shift-sub">Координатор: ' + esc(shift.coordinator) + '</p>' + action + '<button class="cta secondary" style="width:100%; margin-top:10px" onclick="closeModal()">Закрыть</button>');
     }
 
     function openStory(id) {
       const story = app.data.state.stories.find((item) => item.id === id);
       if (!story) return;
       openModal('<div class="grabber"></div><div class="shift-title">' + esc(story.title) + '</div><p class="shift-sub" style="font-size:16px">' + esc(story.body) + '</p><button class="cta" style="width:100%; margin-top:18px" onclick="closeModal()">Понятно</button>');
+    }
+
+    function timelineHtml(status) {
+      const order = ["assigned", "confirmed", "checked_in", "completed"];
+      const labels = {
+        assigned: "Смена выбрана",
+        confirmed: "Выход подтвержден",
+        checked_in: "Отметка на месте",
+        completed: "Смена завершена и уйдет в начисления"
+      };
+      const current = Math.max(0, order.indexOf(status));
+      return order.map((step, index) => '<div class="timeline-step ' + (index <= current ? "done" : "") + '"><span class="timeline-dot"></span><span>' + labels[step] + '</span></div>').join("");
+    }
+
+    function inboxRowsHtml() {
+      const rows = [];
+      const info = assistant();
+      if (myActiveShifts().length === 0) rows.push(["Вы пока без смен", "Бот напомнит открыть поиск, если график пустой.", "сегодня", "search"]);
+      if (info.status === "tomorrow_shift") rows.push(["Завтра смена", "Проверьте время, филиал и подтвердите выход.", "утро", "mine"]);
+      if (info.urgentShiftId) rows.push(["Срочная смена", "Есть открытая замена по вашим филиалам.", "важно", "search"]);
+      rows.push(["Поддержка", "Команды: /my, /today, /money, /help.", "бот", "chat"]);
+      return rows.map(([title, body, time, view]) => '<button class="list-card" onclick="setView(\\'' + view + '\\')"><div class="message-row"><span class="unread-dot"></span><div><div class="shift-title">' + esc(title) + '</div><div class="shift-sub">' + esc(body) + '</div></div><span class="message-time">' + esc(time) + '</span></div></button>').join("");
+    }
+
+    function haptic(type) {
+      if (tg?.HapticFeedback?.notificationOccurred && tg?.isVersionAtLeast?.("6.1")) {
+        tg.HapticFeedback.notificationOccurred(type);
+      }
+    }
+
+    function navBadge(id) {
+      const info = assistant();
+      if (id === "mine" && myActiveShifts().length) return '<span class="nav-badge">' + myActiveShifts().length + '</span>';
+      if (id === "chat" && info.unreadCount) return '<span class="nav-badge">' + info.unreadCount + '</span>';
+      return "";
+    }
+
+    function openTelegramHelp() {
+      openModal('<div class="grabber"></div><div class="shift-title">Команды Telegram-бота</div><p class="shift-sub">/my — мои смены<br>/today — что актуально сегодня<br>/money — начисления и выплаты<br>/help — помощь</p><div class="guidance-block">Бот сможет писать первым только после того, как сотрудник нажмет /start в чате.</div><button class="cta" style="width:100%; margin-top:14px" onclick="closeModal()">Понятно</button>');
     }
 
     function openModal(content) {
@@ -934,13 +1156,13 @@ export function renderAppHtml(): string {
       app.busy = true;
       try {
         await api("/api/shifts/take", { method: "POST", body: JSON.stringify({ shiftId, initData: tg?.initData || "" }) });
-        tg?.HapticFeedback?.notificationOccurred("success");
+        haptic("success");
         await load();
         app.view = "mine";
         render();
         openModal('<div class="grabber"></div><div class="shift-title">Смена добавлена</div><p class="shift-sub">Мы перенесли её в «Мои смены». Следующий шаг — подтвердить выход перед началом.</p><button class="cta" style="width:100%" onclick="closeModal()">Хорошо</button>');
       } catch (error) {
-        tg?.HapticFeedback?.notificationOccurred("error");
+        haptic("error");
         openModal('<div class="grabber"></div><div class="shift-title">Не удалось взять смену</div><p class="shift-sub">' + (error.payload?.message || "Смену уже взяли или она пересекается с вашим графиком.") + '</p><button class="cta" style="width:100%" onclick="closeModal()">Понятно</button>');
       } finally {
         app.busy = false;
@@ -988,6 +1210,7 @@ export function renderAppHtml(): string {
     window.take = take;
     window.openShift = openShift;
     window.openStory = openStory;
+    window.openTelegramHelp = openTelegramHelp;
     window.closeModal = closeModal;
     window.assignmentAction = assignmentAction;
     load();
