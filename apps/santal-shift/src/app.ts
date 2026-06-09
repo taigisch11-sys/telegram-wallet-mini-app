@@ -206,6 +206,11 @@ export function createApp() {
   return app;
 }
 
+export function resetMemoryStateForTest(date = "2026-05-20"): void {
+  memoryState = createDemoState(date);
+  processedUpdates.clear();
+}
+
 export async function handleScheduled(_: ScheduledController, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
   ctx.waitUntil(sendDailyTelegramDigest(env));
 }
@@ -216,6 +221,7 @@ async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
     return undefined;
   });
   if (!loaded) return;
+  if (isStrictProduction(env) && !loaded.sync.connected) return;
   memoryState = loaded.state;
   const sentNotificationKeys = await loadNotificationKeys(env);
   for (const admin of memoryState.admins.filter((item) => item.status === "active" && item.canTakeShifts)) {
@@ -238,8 +244,17 @@ async function sendDailyTelegramDigest(env: WorkerEnv): Promise<void> {
 async function currentState(env: WorkerEnv): Promise<{ state: AppState; sync: StateSync }> {
   const loaded = await loadState(env);
   if (loaded.sync.connected) return loaded;
-  if (isStrictProduction(env)) throw new Error(productionStorageMessage);
-  return { state: memoryState, sync: loaded.sync };
+  if (isStrictProduction(env) && hasGoogleCredentials(env)) throw new Error(productionStorageMessage);
+  return { state: memoryState, sync: temporaryStorageSync(loaded.sync, env) };
+}
+
+function temporaryStorageSync(sync: StateSync, env: WorkerEnv): StateSync {
+  if (!isStrictProduction(env)) return sync;
+  return {
+    ...sync,
+    mode: "memory",
+    message: "Google Sheets не подключен. Включен временный режим: приложение открывается для проверки, но данные хранятся только в памяти Worker и могут сброситься."
+  };
 }
 
 async function resolveIdentity(env: WorkerEnv, initData?: string, demoAdminId?: string): Promise<{ telegramUser?: { id: string; username?: string; firstName?: string; lastName?: string }; demoAdminId?: string }> {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createApp } from "./app";
+import { createApp, resetMemoryStateForTest } from "./app";
 import type { WorkerEnv } from "./env";
 
 const env: WorkerEnv = {
@@ -13,6 +13,7 @@ const env: WorkerEnv = {
 };
 
 afterEach(() => {
+  resetMemoryStateForTest();
   vi.unstubAllGlobals();
 });
 
@@ -89,7 +90,7 @@ describe("Santal Shift worker API", () => {
     expect(response.status).toBe(401);
   });
 
-  it("rejects production bootstrap when Google Sheets storage is not connected", async () => {
+  it("opens production bootstrap in temporary memory mode when Google Sheets storage is not configured", async () => {
     const app = createApp();
     const initData = await signedTelegramInitData({ id: 42, first_name: "Анна" }, env.TELEGRAM_BOT_TOKEN);
     const response = await app.request(
@@ -105,11 +106,12 @@ describe("Santal Shift worker API", () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(503);
-    expect(payload).toMatchObject({
-      ok: false,
-      message: "Хранилище данных не подключено. Попросите координатора завершить настройку Google Sheets."
+    expect(response.status).toBe(200);
+    expect(payload.state.sync).toMatchObject({
+      connected: false,
+      mode: "memory"
     });
+    expect(payload.state.visibleShifts.length).toBeGreaterThan(0);
   });
 
   it("reports release readiness without leaking secret values", async () => {
@@ -194,7 +196,7 @@ describe("Santal Shift worker API", () => {
     expect(body.reply_markup.inline_keyboard[0][0].web_app.url).toBe(env.SANTAL_WEBAPP_URL);
   });
 
-  it("rejects production shift mutations while Google Sheets storage is disconnected", async () => {
+  it("allows production shift mutations in temporary memory mode when Google Sheets storage is not configured", async () => {
     const fetchMock = vi.fn(async () => Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
     const app = createApp();
@@ -216,12 +218,14 @@ describe("Santal Shift worker API", () => {
       }
     );
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      ok: false,
-      message: "Хранилище данных не подключено. Попросите координатора завершить настройку Google Sheets."
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.ok).toBe(true);
+    expect(payload.state.sync).toMatchObject({
+      connected: false,
+      mode: "memory"
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("fails closed when the production Telegram webhook secret is missing", async () => {

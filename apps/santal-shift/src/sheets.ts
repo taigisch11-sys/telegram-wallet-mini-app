@@ -5,7 +5,7 @@ import type { NotificationRecord } from "./notifications";
 
 export type SyncStatus = {
   connected: boolean;
-  mode: "google_sheets" | "demo";
+  mode: "google_sheets" | "demo" | "memory";
   spreadsheetId?: string;
   message: string;
 };
